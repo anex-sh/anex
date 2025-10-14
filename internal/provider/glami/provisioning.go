@@ -1,0 +1,300 @@
+package glami
+
+import (
+	"context"
+	"errors"
+	"math"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/cenkalti/backoff/v4"
+	"github.com/hashicorp/go-retryablehttp"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
+	"gitlab.devklarka.cz/ai/gpu-provider/internal/utils"
+	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
+	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+)
+
+var (
+	ErrMachineNotRunning      = errors.New("machine not running")
+	ErrMachineFailed          = errors.New("machine failed")
+	ErrCandidateMachineFailed = errors.New("candidate failed")
+)
+
+func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
+	var out virtualpod.MachineSpecification
+
+	if val, ok := pod.Spec.Containers[0].Resources.Requests["cpu"]; ok {
+		out.CPUCores = int(val.Value())
+	}
+	if val, ok := pod.Spec.Containers[0].Resources.Requests["memory"]; ok {
+		out.CPURamMB = int(val.ScaledValue(resource.Mega))
+	}
+
+	annotations := pod.GetAnnotations()
+	for key, value := range annotations {
+		if strings.HasPrefix(key, "glami.cz/") {
+			setting := strings.TrimPrefix(key, "glami.cz/")
+			switch setting {
+			case "region":
+				regions := strings.Split(value, ",")
+				for _, r := range regions {
+					if r == "europe" {
+						out.Regions = append(out.Regions, virtualpod.RegionEurope)
+					} else if r == "north-america" {
+						out.Regions = append(out.Regions, virtualpod.RegionNorthAmerica)
+					} else if r == "asia-pacific" {
+						out.Regions = append(out.Regions, virtualpod.RegionAsia)
+					} else if r == "africa" {
+						out.Regions = append(out.Regions, virtualpod.RegionAfrica)
+					} else if r == "south-america" {
+						out.Regions = append(out.Regions, virtualpod.RegionSouthAmerica)
+					} else if r == "oceania" {
+						out.Regions = append(out.Regions, virtualpod.RegionOceania)
+					} else {
+						continue
+					}
+				}
+			case "min-gpu-memory":
+				if q, err := resource.ParseQuantity(value); err == nil {
+					out.MemoryPerGPUMB = int(q.Value() / (1024 * 1024)) // Convert to MB
+				}
+			case "min-cuda":
+				if cuda, err := strconv.ParseFloat(value, 64); err == nil {
+					out.CudaAvailable = cuda
+				}
+			case "disk-space-gb":
+				if diskSpace, err := strconv.ParseInt(value, 10, 64); err == nil {
+					out.DiskSpace = int(diskSpace)
+				}
+			case "max-price":
+				if price, err := strconv.ParseFloat(value, 64); err == nil {
+					out.MaxPricePerHour = price
+				}
+			}
+		}
+	}
+
+	return out
+}
+
+func (p *Provider) machineCleanup(ctx context.Context, vp *virtualpod.VirtualPod) {
+	cleanupCtx := context.WithoutCancel(ctx)
+	cleanupCtx, cancel := context.WithTimeout(cleanupCtx, 10*time.Second) // bound the cleanup
+	defer cancel()
+
+	if !vp.ProvisioningCompleted() {
+		if vp.MachineID() != "" {
+			destroyErr := p.client.DestroyMachine(cleanupCtx, vp.MachineID())
+			if destroyErr != nil {
+				log.G(ctx).Errorf("Error destroying instance: %v", destroyErr)
+			}
+			vp.RemoveMachine()
+		}
+	}
+}
+
+func (p *Provider) restartPod(ctx context.Context, machineID string, pullImage bool) error {
+	return p.client.RestartMachine(ctx, machineID, pullImage)
+}
+
+func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.VirtualPod, restartOnly bool) {
+	start := time.Now()
+	defer vp.ProvisionCancel()
+	defer p.provisioningWG.Done()
+	defer p.machineCleanup(ctx, vp)
+
+	logger := log.G(ctx)
+	logger.Infof("Initializing instance for pod: %s", vp.ID())
+
+	var err error
+	var machineID string
+	var bo backoff.BackOff = backoff.NewConstantBackOff(1 * time.Second)
+	bo = backoff.WithMaxRetries(bo, p.config.Provisioning.RetryLimit)
+	bo = backoff.WithContext(bo, ctx)
+
+	// TODO: Enhance with Kubernetes events
+	op := func() error {
+		if restartOnly {
+			machineID = vp.MachineID()
+			err = p.restartPod(ctx, machineID, vp.ImagePullAlways())
+		} else {
+			machineID, err = p.selectAndProvisionMachine(ctx, vp.Pod(), vp.AuthToken())
+			if err != nil {
+				vp.FailPod(err)
+				p.notifyPodUpdate(vp.Pod())
+				return err
+			}
+
+			vp.SetMachine(&virtualpod.Machine{
+				ID: machineID,
+			})
+		}
+
+		p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeNormal, "Provisioning", "Provisioning machine ID: %s", vp.MachineID())
+
+		err = p.waitForMachineReady(ctx, vp)
+		if err != nil {
+			if errors.Is(err, ErrMachineFailed) || errors.Is(err, context.DeadlineExceeded) {
+				p.mutex.Lock()
+				p.machineBans[machineID] = time.Now()
+				p.mutex.Unlock()
+				_ = p.persistMachineBansToFile()
+				restartOnly = false
+			}
+			p.machineCleanup(ctx, vp)
+			p.metrics.podsProvisioningTotal.WithLabelValues("false", "machine_startup_timeout").Inc()
+			return ErrCandidateMachineFailed
+		}
+
+		// TODO: Change this to a proper backoff by wrapper function and callback for logging - remove network retry logging
+		// 		 Use normal http client with reasonable timeout
+		client := retryablehttp.NewClient()
+		client.HTTPClient.Timeout = 0
+		client.RetryWaitMin = 1 * time.Second
+		client.RetryWaitMax = 30 * time.Second
+		client.RetryMax = math.MaxInt32
+
+		agentCtx, agentStartUpCancel := context.WithTimeout(ctx, time.Duration(p.config.Provisioning.StartupTimeout)*time.Minute)
+		defer agentStartUpCancel()
+
+		err = vp.WaitForAgentReady(agentCtx, client)
+		if err != nil {
+			logger.Error("Agent startup timeout")
+			p.metrics.podsProvisioningTotal.WithLabelValues("false", "agent_startup_timeout").Inc()
+			return ErrMachineFailed
+		}
+
+		err = vp.PushEnvVars(agentCtx, client)
+		if err != nil {
+			logger.Error("Failed to push env vars")
+			p.metrics.podsProvisioningTotal.WithLabelValues("false", "env_var_push_fail").Inc()
+			return ErrMachineFailed
+		}
+
+		err = vp.PushConfigMaps(agentCtx, client)
+		if err != nil {
+			logger.Error("Failed to push config maps")
+			p.metrics.podsProvisioningTotal.WithLabelValues("false", "config_map_push_fail").Inc()
+			return ErrMachineFailed
+		}
+
+		err = vp.PushWireproxyConfig(agentCtx, client)
+		if err != nil {
+			logger.Error("Failed to push wireproxy config")
+			p.metrics.podsProvisioningTotal.WithLabelValues("false", "wireproxy_config_push_fail").Inc()
+			return ErrMachineFailed
+		}
+
+		lokiConfig := virtualpod.LokiPushGateway{
+			URL:      p.lokiGWyUrl,
+			Username: p.lokiGWUsername,
+			Password: p.lokiGWPassword,
+		}
+		err = vp.PushPromtailConfig(agentCtx, client, lokiConfig)
+		if err != nil {
+			logger.Error("Failed to start command")
+			p.metrics.podsProvisioningTotal.WithLabelValues("false", "cmd_start_fail").Inc()
+			return ErrMachineFailed
+		}
+
+		err = vp.RunCommand(agentCtx, client)
+		if err != nil {
+			logger.Error("Failed to start command")
+			p.metrics.podsProvisioningTotal.WithLabelValues("false", "cmd_start_fail").Inc()
+			return ErrMachineFailed
+		}
+
+		lifecycleCtx, lifecycleCancel := context.WithCancel(p.baseContext)
+		vp.LifecycleCancel = lifecycleCancel
+		go p.reconcilePodLifecycle(lifecycleCtx, vp)
+
+		return nil
+	}
+
+	if errMainLoop := backoff.Retry(op, bo); errMainLoop == nil {
+		vp.SetProvisioningCompleted()
+		p.metrics.podsProvisioningTotal.WithLabelValues("true", "ok").Inc()
+		p.metrics.podsByPhase.WithLabelValues("Running").Inc()
+		p.metrics.podsRunning.Inc()
+	} else {
+		p.metrics.podsByPhase.WithLabelValues("Failed").Inc()
+	}
+
+	dur := time.Since(start).Seconds()
+	p.metrics.podsProvisioningDurationSecs.Add(dur)
+}
+
+func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, authToken string) (machineID string, err error) {
+	logger := log.G(ctx)
+	logger.Infof("Initializing instance for pod")
+
+	bo := backoff.NewConstantBackOff(60 * time.Second)
+	op := func() error {
+		machineSpec := newMachineSpecification(pod)
+		var candidates []string
+		candidates, err = p.client.GetRentalCandidates(ctx, machineSpec)
+		if err != nil {
+			p.metrics.podsProvisioningTotal.WithLabelValues("false", "rental_candidates_search_failed").Inc()
+			logger.Error(err)
+			return err
+		}
+
+		// Filter out banned machines
+		var candidatesFiltered []string
+		p.mutex.RLock()
+		for _, candidate := range candidates {
+			if banTime, banned := p.machineBans[candidate]; !banned || time.Since(banTime) > time.Duration(p.config.Provisioning.MachineBanDuration) {
+				candidatesFiltered = append(candidatesFiltered, candidate)
+			}
+		}
+		p.mutex.RUnlock()
+
+		machineID, err = p.client.ProvisionMachine(ctx, candidatesFiltered, pod, authToken)
+		if errors.Is(err, utils.ErrBadPayload) || errors.Is(err, utils.ErrUnauthorized) {
+			p.metrics.podsProvisioningTotal.WithLabelValues("false", "provisioning_call_failed").Inc()
+			return backoff.Permanent(err)
+		}
+
+		return err
+	}
+
+	err = backoff.Retry(op, bo)
+	return machineID, err
+}
+
+func (p *Provider) waitForMachineReady(ctx context.Context, vp *virtualpod.VirtualPod) error {
+	logger := log.G(ctx)
+	logger.Infof("Waiting for machine to be running: %s", vp.MachineID())
+
+	retryCtx, cancel := context.WithTimeout(ctx, time.Duration(p.config.Provisioning.StartupTimeout)*time.Minute)
+	defer cancel()
+
+	var bo backoff.BackOff = backoff.NewConstantBackOff(30 * time.Second)
+	bo = backoff.WithContext(bo, retryCtx)
+
+	op := func() error {
+		if err := retryCtx.Err(); err != nil {
+			return err
+		}
+
+		machine, err := p.client.GetMachine(retryCtx, vp.MachineID())
+		if err != nil {
+			return err
+		}
+
+		switch machine.State {
+		case virtualpod.MachineStateRunning:
+			vp.SetMachine(machine)
+			return nil
+		case virtualpod.MachineStateFailed:
+			return backoff.Permanent(ErrMachineFailed)
+		default:
+			return ErrMachineNotRunning
+		}
+	}
+
+	return backoff.Retry(op, bo)
+}

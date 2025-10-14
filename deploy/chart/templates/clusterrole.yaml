@@ -1,0 +1,39 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: "{{ include "chart.fullname" . }}-virtual-kubelet"
+rules:
+  # Register the virtual node + update its status
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get","list","watch","create","update","patch"]
+  - apiGroups: [""]
+    resources: ["nodes/status"]
+    verbs: ["update","patch"]
+
+  # Heartbeats (node leases live in kube-node-lease)
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get","list","watch","create","update","patch"]
+
+  # Observe pods scheduled to this node and update their status
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get","list","watch","update","patch","delete","create"]
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["update","patch"]
+
+  # Watch Services for port-forward/exec routing and other integrations
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get","list","watch"]
+
+  # Optional but common: logs & events
+  - apiGroups: [""]
+    resources: ["pods/log","events"]
+    verbs: ["get","create","patch","update"]
+
+  - apiGroups: [""]
+    resources: ["configmaps","secrets","serviceaccounts"]
+    verbs: ["get","list","watch"]

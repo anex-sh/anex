@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ include "chart.fullname" . }}-virtual-kubelet-config"
+data:
+  virtual-kubelet-config.yaml: |
+    {{- toYaml .Values.virtualKubelet.nodeConfig | nindent 4 }}

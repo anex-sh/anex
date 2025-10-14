@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ include "chart.fullname" . }}-virtual-kubelet"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "{{ include "chart.fullname" . }}-virtual-kubelet"
+  template:
+    metadata:
+      labels:
+        app: "{{ include "chart.fullname" . }}-virtual-kubelet"
+    spec:
+      serviceAccountName: "{{ include "chart.fullname" . }}"
+      affinity: {{ toYaml .Values.virtualKubelet.affinity | nindent 8 }}
+      containers:
+        - name: virtual-kubelet
+          image: {{ .Values.virtualKubelet.image.repository }}:{{ .Values.virtualKubelet.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.virtualKubelet.image.pullPolicy }}
+          # command: ['sleep', '3600']
+          args:
+            - --nodename={{ .Values.nodeName }}
+            - --provider=vastai
+            - --provider-config=/virtual-kubelet-config.yaml
+          env:
+            - name: CLUSTER_UUID
+              value: {{ .Values.clusterUUID }}
+            - name: VASTAI_API_KEY
+              value: {{ .Values.vastaiApiKey }}
+            - name: VKUBELET_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: vk-config
+              mountPath: /virtual-kubelet-config.yaml
+              subPath: virtual-kubelet-config.yaml
+              readOnly: true
+            - name: proxy-config
+              mountPath: /proxy-config.yaml
+              subPath: proxy-config.yaml
+              readOnly: true
+      volumes:
+        - name: vk-config
+          configMap:
+            name: "{{ include "chart.fullname" . }}-virtual-kubelet-config"
+        - name: proxy-config
+          secret:
+            secretName: glami-provider-proxy-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ include "chart.fullname" . }}-virtual-kubelet"
+spec:
+  selector:
+    app: "{{ include "chart.fullname" . }}-virtual-kubelet"
+  ports:
+    - name: kubelet
+      port: 10250
+      targetPort: 10250
+  type: ClusterIP

@@ -1,0 +1,25 @@
+clusterUUID: service-cluster
+nodeName: vastai-node2
+vastaiApiKey: ""
+
+virtualKubelet:
+  image:
+    repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/virtual-kubelet"
+    tag: "v0.1.1"
+    pullPolicy: Always
+
+  nodeConfig:
+    cpu: "1000"
+    memory: "1000Gi"
+    pods: 1
+    cloudProvider: "vastai"
+    providerID: "mock://vk-minikube"
+    proxyConfigPath: "/proxy-config.yaml"
+    provisioning:
+      maxRetries: 10
+      startupTimeout: 10
+      persistBansToLocalFile: false
+
+  serviceAccount:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::391135486350:role/readonly-ecr
