@@ -11,6 +11,8 @@ import (
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 )
 
+var getECRCredentialsFunc = getECRCredentials
+
 func getECRCredentials(ctx context.Context, accountId string, awsRegion string) (map[string]string, error) {
 	logger := log.G(ctx)
 	logger.Info("Getting ECR credentials for region: " + awsRegion)
@@ -64,7 +66,7 @@ func GetAWSECRLogin(ctx context.Context, image string) string {
 	accountID := parts[0]
 	region := parts[3]
 
-	ecrCredentials, err := getECRCredentials(ctx, accountID, region)
+	ecrCredentials, err := getECRCredentialsFunc(ctx, accountID, region)
 	if err != nil {
 		logger.Warnf("Error getting ECR credentials: %v", err)
 		return ""
