@@ -4,8 +4,7 @@ vastaiApiKey: ""
 
 virtualKubelet:
   image:
-    repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/virtual-kubelet"
-    tag: "v0.1.1"
+    repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
     pullPolicy: Always
 
   nodeConfig:

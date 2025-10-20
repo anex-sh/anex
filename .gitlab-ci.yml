@@ -1,0 +1,169 @@
+stages:
+  - test
+  - build-binary
+  - build-docker-image
+  - package-helm-chart
+
+# Global variables and defaults
+variables:
+  GOFLAGS: "-trimpath"
+  CGO_ENABLED: "0"
+  GOPATH: "/go"
+  GOMODCACHE: "/go/pkg/mod"
+
+  # AWS / ECR defaults
+  ACCOUNT_ID: "391135486350"
+  REGION: "eu-central-1"
+  ECR_REGISTRY: "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com"
+
+  # Where the pipeline CI image will be published (built in 'build_ci_image' job)
+  CI_PIPELINE_IMAGE: "$CI_REGISTRY_IMAGE/integration:latest"
+
+  # Ensure full git history for branch containment check
+  GIT_DEPTH: "0"
+
+  # talk to the dind service over TCP
+  DOCKER_HOST: tcp://docker:2375
+  # disable TLS for simplicity (alternatively configure certs and use :2376)
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DRIVER: overlay2
+
+# Cache Go modules and build cache between jobs
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  policy: pull-push
+  paths:
+    - go/pkg/mod
+    - .cache/go-build
+
+# 1) On merge requests: run tests, build binary, build + push image from binary artifact
+formatting:
+  stage: test
+  image: "$CI_PIPELINE_IMAGE"
+  rules:
+    # MR pipeline
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: on_success
+    # Production tag pipeline (run tests as part of prod)
+    - if: '$CI_COMMIT_TAG =~ /^virtual-kubelet_v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/'
+      when: on_success
+    - when: never
+  before_script:
+    - go mod download
+  script: |
+    if [ -n "$(gofmt -l .)" ]; then
+      echo "Go files are not properly formatted. Run 'go fmt ./...'"
+      exit 1
+    fi
+    echo "Files are properly formatted"
+
+unit_tests:
+  stage: test
+  image: "$CI_PIPELINE_IMAGE"
+  rules:
+    # MR pipeline
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: on_success
+    # Production tag pipeline (run tests as part of prod)
+    - if: '$CI_COMMIT_TAG =~ /^virtual-kubelet_v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/'
+      when: on_success
+    - when: never
+  before_script:
+    - go mod download
+  script:
+    # Avoid -race since CGO is disabled by default for static builds
+    - go test -v ./...
+
+# Build static binary artifact for cmd/virtual-kubelet
+build:
+  stage: build-binary
+  image: "$CI_PIPELINE_IMAGE"
+  needs: ["unit_tests"]
+  rules:
+    # MR pipeline
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: on_success
+    # Production tag pipeline
+    - if: '$CI_COMMIT_TAG =~ /^virtual-kubelet_v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/'
+      when: on_success
+    - when: never
+  script:
+    - mkdir -p dist
+    - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -extldflags=-static" -o dist/virtual-kubelet ./cmd/virtual-kubelet
+    - ls -lh dist
+  artifacts:
+    name: "virtual-kubelet-$CI_COMMIT_SHORT_SHA"
+    expire_in: 14 days
+    paths:
+      - dist/virtual-kubelet
+
+# MR-only: build image from binary artifact and push to ECR as .../gpu-provider/<branch>:latest
+build_image_branch:
+  stage: build-docker-image
+  image: "$CI_PIPELINE_IMAGE"
+  needs:
+    - job: build
+      artifacts: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: on_success
+    - when: never
+  tags:
+    - build-as-docker
+  services:
+    - name: docker:26-dind
+  script:
+    - aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+    - mkdir -p bin
+    - cp dist/virtual-kubelet bin/virtual_kubelet
+    - docker build -f deploy/Dockerfile -t "$ECR_REGISTRY/gpu-provider:$CI_COMMIT_REF_SLUG" .
+    - docker push "$ECR_REGISTRY/gpu-provider:$CI_COMMIT_REF_SLUG"
+
+# 2) Production build: tag must be "virtual-kubelet_vX.Y.Z", commit must be on main, values.yaml tag must match
+build_image_prod:
+  stage: build-docker-image
+  image: "$CI_PIPELINE_IMAGE"
+  needs:
+    - job: build
+      artifacts: true
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^virtual-kubelet_v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/'
+      when: on_success
+    - when: never
+  tags:
+    - build-as-docker
+  services:
+    - name: docker:26-dind
+  script:
+    - RAW_VERSION="${CI_COMMIT_TAG#virtual-kubelet_}"
+    - aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+    - mkdir -p bin
+    - cp dist/virtual-kubelet bin/virtual_kubelet
+    - docker build -f deploy/Dockerfile -t "$ECR_REGISTRY/gpu-provider:$RAW_VERSION" .
+    - docker push "$ECR_REGISTRY/gpu-provider:$RAW_VERSION"
+
+# Package Helm chart and push to OCI ECR for production release
+package_helm_chart_prod:
+  stage: package-helm-chart
+  image: "$CI_PIPELINE_IMAGE"
+  needs: ["build_image_prod"]
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^virtual-kubelet_v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/'
+      when: on_success
+    - when: never
+  script:
+    - RAW_VERSION="${CI_COMMIT_TAG#virtual-kubelet_}"
+    - VERSION="${RAW_VERSION#v}"
+    - helm version
+    - aws --version
+    - echo "Helm registry login to $ECR_REGISTRY"
+    - aws ecr get-login-password --region "$REGION" | helm registry login -u AWS --password-stdin "$ECR_REGISTRY"
+    - helm package deploy/chart --version "$VERSION" --app-version "$VERSION"
+    - CHART_FILE="gpu-provider-$VERSION.tgz"
+    - echo "Pushing $CHART_FILE to oci://$ECR_REGISTRY/helm"
+    - helm push "$CHART_FILE" "oci://$ECR_REGISTRY/helm"
+  artifacts:
+    name: "helm-chart-$CI_COMMIT_TAG"
+    expire_in: 14 days
+    paths:
+      - gpu-provider-*.tgz
