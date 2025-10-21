@@ -4,4 +4,48 @@ metadata:
   name: "{{ include "chart.fullname" . }}-virtual-kubelet-config"
 data:
   virtual-kubelet-config.yaml: |
-    {{- toYaml .Values.virtualKubelet.nodeConfig | nindent 4 }}
+    cluster:
+      clusterUUID: {{ .Values.cluster.clusterUUID | quote }}
+    cloudProvider:
+      vastAI:
+        apiKey: {{ .Values.cloudProvider.vastAI.apiKey | quote }}
+    virtualKubelet:
+      image:
+        repository: {{ .Values.virtualKubelet.image.repository | quote }}
+        pullPolicy: {{ .Values.virtualKubelet.image.pullPolicy | quote }}
+      serviceAccount:
+        {{- if .Values.virtualKubelet.serviceAccount.annotations }}
+        annotations:
+          {{- toYaml .Values.virtualKubelet.serviceAccount.annotations | nindent 10 }}
+        {{- else }}
+        annotations: {}
+        {{- end }}
+      provisioning:
+        maxRetries: {{ .Values.virtualKubelet.provisioning.maxRetries }}
+        startupTimeout: {{ .Values.virtualKubelet.provisioning.startupTimeout }}
+        machineBansStore:
+          localFile:
+            enable: {{ .Values.virtualKubelet.provisioning.machineBansStore.localFile.enable }}
+            {{- if .Values.virtualKubelet.provisioning.machineBansStore.localFile.timeout }}
+            timeout: {{ .Values.virtualKubelet.provisioning.machineBansStore.localFile.timeout | quote }}
+            {{- end }}
+    virtualNode:
+      pods: {{ .Values.virtualNode.pods | quote }}
+      cpu: {{ .Values.virtualNode.cpu | quote }}
+      memory: {{ .Values.virtualNode.memory | quote }}
+    proxy:
+      enable: {{ .Values.proxy.enable }}
+      {{- if .Values.proxy.configPath }}
+      configPath: {{ .Values.proxy.configPath | quote }}
+      {{- end }}
+    {{- if .Values.agentAuthToken }}
+    agentAuthToken: {{ .Values.agentAuthToken | quote }}
+    {{- end }}
+    promtail:
+      enable: {{ .Values.promtail.enable }}
+      {{- if .Values.promtail.clients }}
+      clients:
+        {{- toYaml .Values.promtail.clients | nindent 8 }}
+      {{- else }}
+      clients: []
+      {{- end }}

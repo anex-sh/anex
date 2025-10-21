@@ -3,7 +3,6 @@ package glami
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -48,10 +47,6 @@ type Provider struct {
 	machineBans           map[string]time.Time
 	k8s                   *kubernetes.Clientset
 	metrics               *Metrics
-	lokiGWyUrl            string
-	lokiGWUsername        string
-	lokiGWPassword        string
-	agentAuthToken        string
 }
 
 func newCoreV1Recorder(client kubernetes.Interface, scheme *runtime.Scheme, component string) (record.EventRecorder, func()) {
@@ -63,25 +58,14 @@ func newCoreV1Recorder(client kubernetes.Interface, scheme *runtime.Scheme, comp
 }
 
 func NewGlamiProvider(providerConfig string, nodeName, operatingSystem string, internalIP string, daemonEndpointPort int32) (*Provider, error) {
-	// TODO: Better config load
 	config, err := loadConfig(providerConfig, nodeName)
 	if err != nil {
 		return nil, err
 	}
 
-	if config.CPU == "" {
-		config.CPU = defaultCPUCapacity
-	}
-	if config.Memory == "" {
-		config.Memory = defaultMemoryCapacity
-	}
-	if config.Pods == "" {
-		config.Pods = defaultPodCapacity
-	}
-
-	clusterUUID := os.Getenv("CLUSTER_UUID")
+	clusterUUID := config.Cluster.ClusterUUID
 	if clusterUUID == "" {
-		return nil, fmt.Errorf("CLUSTER_UUID environment variable is not set")
+		return nil, fmt.Errorf("cluster.clusterUUID is not set in config")
 	}
 
 	// Build Kubernetes client (works in-cluster with ServiceAccount or out-of-cluster with kubeconfig)
@@ -110,38 +94,23 @@ func NewGlamiProvider(providerConfig string, nodeName, operatingSystem string, i
 		k8s:                   clientSet,
 	}
 
-	// Configure cloud provider
-	if config.CloudProvider == "vastai" {
-		apiKey := os.Getenv("VASTAI_API_KEY")
-		if apiKey == "" {
-			return nil, fmt.Errorf("VASTAI_API_KEY environment variable is not set")
-		}
-
-		provider.client = vastai.NewClient("https://console.vast.ai/api/v0", apiKey, clusterUUID, nodeName)
-	} else {
-		return nil, fmt.Errorf("unsupported cloud provider: %s", config.CloudProvider)
-	}
-
-	provider.agentAuthToken = os.Getenv("AGENT_AUTH_TOKEN")
-
-	provider.lokiGWyUrl = os.Getenv("LOKI_PUSHGATEWAY_URL")
-	provider.lokiGWUsername = os.Getenv("LOKI_PUSHGATEWAY_USERNAME")
-	provider.lokiGWPassword = os.Getenv("LOKI_PUSHGATEWAY_PASSWORD")
-	if provider.lokiGWyUrl == "" || provider.lokiGWUsername == "" || provider.lokiGWPassword == "" {
-		return nil, fmt.Errorf("LOKI_PUSHGATEWAY_URL, LOKI_PUSHGATEWAY_USERNAME or LOKI_PUSHGATEWAY_PASSWORD environment variable is not set")
-	}
+	// Configure cloud provider - currently only VastAI is supported
+	provider.client = vastai.NewClient("https://console.vast.ai/api/v0", config.CloudProvider.VastAI.APIKey, clusterUUID, nodeName)
 
 	ctx := context.Background()
-
-	// Initialize WireGuard keys and assignments
-	err = provider.loadProxyConfig()
-	if err != nil {
-		log.G(ctx).Errorf("failed to load wireguard keys from %s: %v", config.ProxyConfigPath, err)
+	// Initialize WireGuard keys and assignments if proxy is enabled
+	if config.Proxy.Enable {
+		err = provider.loadProxyConfig()
+		if err != nil {
+			log.G(ctx).Errorf("failed to load wireguard keys: %v", err)
+		}
 	}
 
 	// Load persisted machine bans if configured
-	if err := provider.loadMachineBansFromFile(); err != nil {
-		log.G(ctx).Errorf("failed to load machine bans from %s: %v", config.Provisioning.BansFilePath, err)
+	if config.VirtualKubelet.Provisioning.MachineBansStore.LocalFile.Enable {
+		if err := provider.loadMachineBansFromFile(); err != nil {
+			log.G(ctx).Errorf("failed to load machine bans: %v", err)
+		}
 	}
 
 	provider.metrics = NewMetrics()
@@ -264,7 +233,7 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	key := buildKey(pod)
 	createCtx, cancel := context.WithCancel(p.baseContext)
 
-	vp := virtualpod.NewVirtualPod(key, pod, &virtualpod.Machine{}, proxyConfig, configMaps, mountPaths, p.agentAuthToken)
+	vp := virtualpod.NewVirtualPod(key, pod, &virtualpod.Machine{}, proxyConfig, configMaps, mountPaths, p.config.AgentAuthToken)
 	vp.ProvisionCancel = cancel
 	p.virtualPods[key] = vp
 

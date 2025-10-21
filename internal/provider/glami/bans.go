@@ -8,7 +8,12 @@ import (
 )
 
 func (p *Provider) bansPersistenceEnabled() bool {
-	return p.config.Provisioning.PersistBansToFile && p.config.Provisioning.BansFilePath != ""
+	return p.config.VirtualKubelet.Provisioning.MachineBansStore.LocalFile.Enable
+}
+
+func (p *Provider) getBansFilePath() string {
+	// Default path if not specified
+	return "/tmp/machine-bans.json"
 }
 
 // TODO: Allow DB option for this
@@ -16,7 +21,7 @@ func (p *Provider) loadMachineBansFromFile() error {
 	if !p.bansPersistenceEnabled() {
 		return nil
 	}
-	path := p.config.Provisioning.BansFilePath
+	path := p.getBansFilePath()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -40,7 +45,7 @@ func (p *Provider) persistMachineBansToFile() error {
 	if !p.bansPersistenceEnabled() {
 		return nil
 	}
-	path := p.config.Provisioning.BansFilePath
+	path := p.getBansFilePath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}

@@ -1,24 +1,40 @@
-clusterUUID: service-cluster
-nodeName: vastai-node2
-vastaiApiKey: ""
+cluster:
+  clusterUUID: "rex-dev"
+
+cloudProvider:
+  vastAI:
+    apiKey: "xxx"
 
 virtualKubelet:
   image:
     repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
     pullPolicy: Always
 
-  nodeConfig:
-    cpu: "1000"
-    memory: "1000Gi"
-    pods: 1
-    cloudProvider: "vastai"
-    providerID: "mock://vk-minikube"
-    proxyConfigPath: "/proxy-config.yaml"
-    provisioning:
-      maxRetries: 10
-      startupTimeout: 10
-      persistBansToLocalFile: false
-
   serviceAccount:
-    annotations:
-      eks.amazonaws.com/role-arn: arn:aws:iam::391135486350:role/readonly-ecr
+    annotations: {}
+
+  provisioning:
+    maxRetries: 10
+    startupTimeout: "10m"
+    machineBansStore:
+      localFile:
+        enable: true
+        timeout: "1d"
+
+virtualNode:
+  pods: "1"
+  cpu: "1000"
+  memory: "1000Gi"
+
+agentAuthToken: ""
+
+proxy:
+  enable: false
+
+promtail:
+  enable: false
+  clients: []
+    # - url: "https://example-loki-gateway.com/loki/api/v1/push"
+    #   basicAuth:
+    #     username: "username"
+    #     password: "password"

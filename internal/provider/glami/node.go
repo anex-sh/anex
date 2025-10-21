@@ -63,9 +63,6 @@ func (p *Provider) ConfigureNode(ctx context.Context, n *v1.Node) {
 
 	p.baseContext = ctx
 
-	if p.config.ProviderID != "" {
-		n.Spec.ProviderID = p.config.ProviderID
-	}
 	n.Status.Capacity = p.capacity()
 	n.Status.Allocatable = p.capacity()
 	n.Status.Conditions = p.nodeConditions()
@@ -125,13 +122,10 @@ func (p *Provider) ConfigureNode(ctx context.Context, n *v1.Node) {
 // Capacity returns a resource list containing the capacity limits.
 func (p *Provider) capacity() v1.ResourceList {
 	rl := v1.ResourceList{
-		"cpu":    resource.MustParse(p.config.CPU),
-		"memory": resource.MustParse(p.config.Memory),
-		"pods":   resource.MustParse(p.config.Pods),
+		"cpu":    resource.MustParse(p.config.VirtualNode.CPU),
+		"memory": resource.MustParse(p.config.VirtualNode.Memory),
+		"pods":   resource.MustParse(p.config.VirtualNode.Pods),
 	}
-	//for k, v := range p.config.Others {
-	//	rl[v1.ResourceName(k)] = resource.MustParse(v)
-	//}
 	return rl
 }
 

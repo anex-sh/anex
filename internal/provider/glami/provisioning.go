@@ -112,7 +112,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 	var err error
 	var machineID string
 	var bo backoff.BackOff = backoff.NewConstantBackOff(1 * time.Second)
-	bo = backoff.WithMaxRetries(bo, p.config.Provisioning.RetryLimit)
+	bo = backoff.WithMaxRetries(bo, uint64(p.config.VirtualKubelet.Provisioning.MaxRetries))
 	bo = backoff.WithContext(bo, ctx)
 
 	// TODO: Enhance with Kubernetes events
@@ -140,8 +140,8 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			if errors.Is(err, ErrMachineFailed) || errors.Is(err, context.DeadlineExceeded) {
 				p.mutex.Lock()
 				p.machineBans[machineID] = time.Now()
-				p.mutex.Unlock()
 				_ = p.persistMachineBansToFile()
+				p.mutex.Unlock()
 				restartOnly = false
 			}
 			p.machineCleanup(ctx, vp)
@@ -157,7 +157,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 		client.RetryWaitMax = 30 * time.Second
 		client.RetryMax = math.MaxInt32
 
-		agentCtx, agentStartUpCancel := context.WithTimeout(ctx, time.Duration(p.config.Provisioning.StartupTimeout)*time.Minute)
+		agentCtx, agentStartUpCancel := context.WithTimeout(ctx, p.config.GetStartupTimeout())
 		defer agentStartUpCancel()
 
 		err = vp.WaitForAgentReady(agentCtx, client)
@@ -188,10 +188,11 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			return ErrMachineFailed
 		}
 
+		// TODO: Implement multiple clients
 		lokiConfig := virtualpod.LokiPushGateway{
-			URL:      p.lokiGWyUrl,
-			Username: p.lokiGWUsername,
-			Password: p.lokiGWPassword,
+			URL:      p.config.Promtail.Clients[0].URL,
+			Username: p.config.Promtail.Clients[0].BasicAuth.Username,
+			Password: p.config.Promtail.Clients[0].BasicAuth.Password,
 		}
 		err = vp.PushPromtailConfig(agentCtx, client, lokiConfig)
 		if err != nil {
@@ -244,9 +245,10 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, a
 
 		// Filter out banned machines
 		var candidatesFiltered []string
+		banDuration := time.Duration(p.config.GetMachineBanDuration()) * time.Second
 		p.mutex.RLock()
 		for _, candidate := range candidates {
-			if banTime, banned := p.machineBans[candidate]; !banned || time.Since(banTime) > time.Duration(p.config.Provisioning.MachineBanDuration) {
+			if banTime, banned := p.machineBans[candidate]; !banned || (banDuration > 0 && time.Since(banTime) > banDuration) {
 				candidatesFiltered = append(candidatesFiltered, candidate)
 			}
 		}
@@ -269,7 +271,7 @@ func (p *Provider) waitForMachineReady(ctx context.Context, vp *virtualpod.Virtu
 	logger := log.G(ctx)
 	logger.Infof("Waiting for machine to be running: %s", vp.MachineID())
 
-	retryCtx, cancel := context.WithTimeout(ctx, time.Duration(p.config.Provisioning.StartupTimeout)*time.Minute)
+	retryCtx, cancel := context.WithTimeout(ctx, p.config.GetStartupTimeout())
 	defer cancel()
 
 	var bo backoff.BackOff = backoff.NewConstantBackOff(30 * time.Second)

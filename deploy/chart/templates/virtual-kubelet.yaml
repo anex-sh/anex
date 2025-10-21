@@ -12,7 +12,7 @@ spec:
       labels:
         app: "{{ include "chart.fullname" . }}-virtual-kubelet"
     spec:
-      serviceAccountName: "{{ include "chart.fullname" . }}"
+
       affinity: {{ toYaml .Values.virtualKubelet.affinity | nindent 8 }}
       containers:
         - name: virtual-kubelet
@@ -20,14 +20,12 @@ spec:
           imagePullPolicy: {{ .Values.virtualKubelet.image.pullPolicy }}
           # command: ['sleep', '3600']
           args:
-            - --nodename={{ .Values.nodeName }}
-            - --provider=vastai
             - --provider-config=/virtual-kubelet-config.yaml
           env:
-            - name: CLUSTER_UUID
-              value: {{ .Values.clusterUUID }}
-            - name: VASTAI_API_KEY
-              value: {{ .Values.vastaiApiKey }}
+            {{- if .Values.proxy.enable }}
+            - name: PROXY_CONFIG_PATH
+              value: "/proxy-config.yaml"
+            {{- end }}
             - name: VKUBELET_POD_IP
               valueFrom:
                 fieldRef:
@@ -37,27 +35,19 @@ spec:
               mountPath: /virtual-kubelet-config.yaml
               subPath: virtual-kubelet-config.yaml
               readOnly: true
+          {{- if .Values.proxy.enable }}
             - name: proxy-config
               mountPath: /proxy-config.yaml
               subPath: proxy-config.yaml
               readOnly: true
+          {{- end }}
       volumes:
         - name: vk-config
           configMap:
             name: "{{ include "chart.fullname" . }}-virtual-kubelet-config"
+        {{- if .Values.proxy.enable }}
         - name: proxy-config
           secret:
             secretName: glami-provider-proxy-config
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: "{{ include "chart.fullname" . }}-virtual-kubelet"
-spec:
-  selector:
-    app: "{{ include "chart.fullname" . }}-virtual-kubelet"
-  ports:
-    - name: kubelet
-      port: 10250
-      targetPort: 10250
-  type: ClusterIP
+        {{- end }}
+      serviceAccountName: "{{ include "chart.fullname" . }}"
