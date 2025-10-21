@@ -94,6 +94,43 @@ func (p *Provider) ConfigureNode(ctx context.Context, n *v1.Node) {
 		})
 	}
 
+	// Apply additional labels from config
+	if len(p.config.VirtualNode.Labels) > 0 {
+		if n.Labels == nil {
+			n.Labels = map[string]string{}
+		}
+		for k, v := range p.config.VirtualNode.Labels {
+			n.Labels[k] = v
+		}
+	}
+
+	// Apply additional taints from config
+	for _, t := range p.config.VirtualNode.Taints {
+		var effect v1.TaintEffect
+		switch t.Effect {
+		case "NoSchedule":
+			effect = v1.TaintEffectNoSchedule
+		case "NoExecute":
+			effect = v1.TaintEffectNoExecute
+		case "PreferNoSchedule":
+			effect = v1.TaintEffectPreferNoSchedule
+		default:
+			// unsupported effect, skip
+			continue
+		}
+
+		taint := v1.Taint{
+			Key:    t.Key,
+			Effect: effect,
+		}
+		// Taint API doesn't have an Operator field; interpret "Exists" as no value.
+		if t.Operator != "Exists" {
+			taint.Value = t.Value
+		}
+
+		n.Spec.Taints = append(n.Spec.Taints, taint)
+	}
+
 	// Start the notifier goroutine
 	go func(ctx context.Context) {
 		for {
@@ -124,7 +161,7 @@ func (p *Provider) capacity() v1.ResourceList {
 	rl := v1.ResourceList{
 		"cpu":    resource.MustParse(p.config.VirtualNode.CPU),
 		"memory": resource.MustParse(p.config.VirtualNode.Memory),
-		"pods":   resource.MustParse(p.config.VirtualNode.Pods),
+		"pods":   resource.MustParse(p.config.VirtualNode.PodLimit),
 	}
 	return rl
 }

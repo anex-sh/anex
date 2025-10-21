@@ -30,9 +30,22 @@ data:
             timeout: {{ .Values.virtualKubelet.provisioning.machineBansStore.localFile.timeout | quote }}
             {{- end }}
     virtualNode:
+      nodeName: {{ .Values.virtualNode.nodeName | quote }}
       pods: {{ .Values.virtualNode.pods | quote }}
       cpu: {{ .Values.virtualNode.cpu | quote }}
       memory: {{ .Values.virtualNode.memory | quote }}
+      {{- if .Values.virtualNode.labels }}
+      labels:
+        {{- toYaml .Values.virtualNode.labels | nindent 8 }}
+      {{- else }}
+      labels: {}
+      {{- end }}
+      {{- if .Values.virtualNode.taints }}
+      taints:
+        {{- toYaml .Values.virtualNode.taints | nindent 8 }}
+      {{- else }}
+      taints: []
+      {{- end }}
     proxy:
       enable: {{ .Values.proxy.enable }}
       {{- if .Values.proxy.configPath }}

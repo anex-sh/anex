@@ -10,7 +10,6 @@ func registerVastAI(s *provider.Store) {
 	s.Register("vastai", func(cfg provider.InitConfig) (provider.Provider, error) { //nolint:errcheck
 		return glami.NewGlamiProvider(
 			cfg.ConfigPath,
-			cfg.NodeName,
 			cfg.OperatingSystem,
 			cfg.InternalIP,
 			cfg.DaemonPort,

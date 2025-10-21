@@ -22,9 +22,12 @@ virtualKubelet:
         timeout: "1d"
 
 virtualNode:
-  pods: "1"
+  nodeName: "virtual-node"
+  podLimit: "1"
   cpu: "1000"
   memory: "1000Gi"
+  labels: {}
+  taints: []
 
 agentAuthToken: ""
 

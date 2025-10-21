@@ -57,7 +57,7 @@ func newCoreV1Recorder(client kubernetes.Interface, scheme *runtime.Scheme, comp
 	return rec, b.Shutdown
 }
 
-func NewGlamiProvider(providerConfig string, nodeName, operatingSystem string, internalIP string, daemonEndpointPort int32) (*Provider, error) {
+func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP string, daemonEndpointPort int32) (*Provider, error) {
 	config, err := loadConfig(providerConfig)
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func NewGlamiProvider(providerConfig string, nodeName, operatingSystem string, i
 	recorder, shutdown := newCoreV1Recorder(clientSet, scheme, "virtualpod-controller")
 
 	provider := Provider{
-		nodeName:              nodeName,
+		nodeName:              config.VirtualNode.NodeName,
 		operatingSystem:       operatingSystem,
 		internalIP:            internalIP,
 		daemonEndpointPort:    daemonEndpointPort,
@@ -95,7 +95,7 @@ func NewGlamiProvider(providerConfig string, nodeName, operatingSystem string, i
 	}
 
 	// Configure cloud provider - currently only VastAI is supported
-	provider.client = vastai.NewClient("https://console.vast.ai/api/v0", config.CloudProvider.VastAI.APIKey, clusterUUID, nodeName)
+	provider.client = vastai.NewClient("https://console.vast.ai/api/v0", config.CloudProvider.VastAI.APIKey, clusterUUID, config.VirtualNode.NodeName)
 
 	ctx := context.Background()
 	// Initialize WireGuard keys and assignments if proxy is enabled

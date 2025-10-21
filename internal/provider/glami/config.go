@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
+// TODO: Refactor defaults
 const (
 	// Provider configuration defaults.
 
@@ -75,11 +76,22 @@ type VirtualKubeletConfig struct {
 	Provisioning   VirtualKubeletProvisioningConfig   `yaml:"provisioning"`
 }
 
+// TaintConfig holds a taint entry for the virtual node
+type TaintConfig struct {
+	Key      string `yaml:"key"`
+	Operator string `yaml:"operator,omitempty"`
+	Effect   string `yaml:"effect"`
+	Value    string `yaml:"value,omitempty"`
+}
+
 // VirtualNodeConfig holds virtual node configuration
 type VirtualNodeConfig struct {
-	Pods   string `yaml:"pods"`
-	CPU    string `yaml:"cpu"`
-	Memory string `yaml:"memory"`
+	NodeName string            `yaml:"nodeName,omitempty"`
+	PodLimit string            `yaml:"podLimit"`
+	CPU      string            `yaml:"cpu"`
+	Memory   string            `yaml:"memory"`
+	Labels   map[string]string `yaml:"labels,omitempty"`
+	Taints   []TaintConfig     `yaml:"taints,omitempty"`
 }
 
 // ProxyConfig holds proxy configuration
@@ -186,8 +198,11 @@ func (c *ProviderConfig) overrideWithEnv() {
 	}
 
 	// VirtualNode
+	if val := os.Getenv(getEnvWithPrefix("virtualNode", "nodeName")); val != "" {
+		c.VirtualNode.NodeName = val
+	}
 	if val := os.Getenv(getEnvWithPrefix("virtualNode", "pods")); val != "" {
-		c.VirtualNode.Pods = val
+		c.VirtualNode.PodLimit = val
 	}
 	if val := os.Getenv(getEnvWithPrefix("virtualNode", "cpu")); val != "" {
 		c.VirtualNode.CPU = val
@@ -284,6 +299,10 @@ func loadConfig(providerConfig string) (config ProviderConfig, err error) {
 		return config, fmt.Errorf("cloudProvider.vastAI.apiKey is required and cannot be empty")
 	}
 
+	if config.VirtualNode.NodeName == "" {
+		config.VirtualNode.NodeName = "virtual-node"
+	}
+
 	// Apply defaults for VirtualNode if any field is empty
 	if config.VirtualNode.CPU == "" {
 		config.VirtualNode.CPU = defaultCPUCapacity
@@ -291,8 +310,8 @@ func loadConfig(providerConfig string) (config ProviderConfig, err error) {
 	if config.VirtualNode.Memory == "" {
 		config.VirtualNode.Memory = defaultMemoryCapacity
 	}
-	if config.VirtualNode.Pods == "" {
-		config.VirtualNode.Pods = defaultPodCapacity
+	if config.VirtualNode.PodLimit == "" {
+		config.VirtualNode.PodLimit = defaultPodCapacity
 	}
 
 	// Validate resource quantities
@@ -302,8 +321,8 @@ func loadConfig(providerConfig string) (config ProviderConfig, err error) {
 	if _, err = resource.ParseQuantity(config.VirtualNode.Memory); err != nil {
 		return config, fmt.Errorf("invalid memory value %v", config.VirtualNode.Memory)
 	}
-	if _, err = resource.ParseQuantity(config.VirtualNode.Pods); err != nil {
-		return config, fmt.Errorf("invalid pods value %v", config.VirtualNode.Pods)
+	if _, err = resource.ParseQuantity(config.VirtualNode.PodLimit); err != nil {
+		return config, fmt.Errorf("invalid pods value %v", config.VirtualNode.PodLimit)
 	}
 
 	// Validate promtail config
