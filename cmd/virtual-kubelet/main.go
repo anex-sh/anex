@@ -54,6 +54,7 @@ func main() {
 	trace.T = opencensus.Adapter{}
 
 	var opts root.Opts
+	// TODO: FROM HERE
 	optsErr := root.SetDefaultOpts(&opts)
 	opts.Version = strings.Join([]string{k8sVersion, "vk", buildVersion}, "-")
 

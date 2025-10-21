@@ -10,4 +10,4 @@ RUN apt-get update && \
 COPY bin/virtual_kubelet /usr/bin/virtual-kubelet
 
 ENTRYPOINT [ "/usr/bin/virtual-kubelet" ]
-CMD [ "--help" ]
+CMD [ "help" ]

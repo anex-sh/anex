@@ -90,6 +90,7 @@ func runRootCommand(ctx context.Context, s *provider.Store, c Opts) error {
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "could not create resource manager")
 		}
+		// TODO: Fix missing env var VKUBELET_POD_IP
 		initConfig := provider.InitConfig{
 			ConfigPath:        c.ProviderConfigPath,
 			NodeName:          c.NodeName,

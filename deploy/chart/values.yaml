@@ -1,9 +1,9 @@
 cluster:
-  clusterUUID: "rex-dev"
+  clusterUUID: ""
 
 cloudProvider:
   vastAI:
-    apiKey: "xxx"
+    apiKey: ""
 
 virtualKubelet:
   image:

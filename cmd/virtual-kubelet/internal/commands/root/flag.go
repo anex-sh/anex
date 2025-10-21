@@ -15,14 +15,12 @@
 package root
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
-	klog "k8s.io/klog/v2"
 )
 
 type mapVar map[string]string
@@ -100,12 +98,19 @@ func installFlags(flags *pflag.FlagSet, c *Opts) {
 	flags.DurationVar(&c.StreamCreationTimeout, "stream-creation-timeout", c.StreamCreationTimeout,
 		"stream-creation-timeout is the maximum time for streaming connection, default 30s.")
 
-	flagset := flag.NewFlagSet("klog", flag.PanicOnError)
-	klog.InitFlags(flagset)
-	flagset.VisitAll(func(f *flag.Flag) {
-		f.Name = "klog." + f.Name
-		flags.AddGoFlag(f)
-	})
+	// TODO: Consider klog usage
+	//flagset := flag.NewFlagSet("klog", flag.PanicOnError)
+	//klog.InitFlags(flagset)
+	//flagset.VisitAll(func(f *flag.Flag) {
+	//	f.Name = "klog." + f.Name
+	//	flags.AddGoFlag(f)
+	//})
+
+	// Hide unused flags:
+	removedFlags := []string{"cluster-domain", "nodename", "os", "provider", "metrics-addr", "disable-taint", "pod-sync-workers", "trace-exporter", "trace-service-name", "trace-tag", "trace-sample-rate", "full-resync-period", "startup-timeout", "stream-idle-timeout", "stream-creation-timeout"}
+	for _, f := range removedFlags {
+		flags.MarkHidden(f)
+	}
 }
 
 func getEnv(key, defaultValue string) string {

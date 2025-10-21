@@ -101,6 +101,10 @@ const maxInt32 = 1<<31 - 1
 // SetDefaultOpts sets default options for unset values on the passed in option struct.
 // Fields tht are already set will not be modified.
 func SetDefaultOpts(c *Opts) error {
+	if c.Provider == "" {
+		c.Provider = "vastai"
+	}
+
 	if c.OperatingSystem == "" {
 		c.OperatingSystem = DefaultOperatingSystem
 	}

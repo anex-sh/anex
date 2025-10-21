@@ -58,7 +58,7 @@ func newCoreV1Recorder(client kubernetes.Interface, scheme *runtime.Scheme, comp
 }
 
 func NewGlamiProvider(providerConfig string, nodeName, operatingSystem string, internalIP string, daemonEndpointPort int32) (*Provider, error) {
-	config, err := loadConfig(providerConfig, nodeName)
+	config, err := loadConfig(providerConfig)
 	if err != nil {
 		return nil, err
 	}
