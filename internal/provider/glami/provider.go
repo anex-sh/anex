@@ -267,6 +267,7 @@ func (p *Provider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 // DeletePod deletes the specified pod out of memory.
 func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 	p.metrics.deletePodOperationsTotal.Inc()
+	p.metrics.podsByPhase.WithLabelValues("Deleted").Inc()
 	ctx, span := trace.StartSpan(ctx, "DeletePod")
 	defer span.End()
 
@@ -286,8 +287,8 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 	defer p.mutex.Unlock()
 
 	if vp.ProvisioningCompleted() {
-		vp.LifecycleCancel()
 		p.metrics.podsRunning.Dec()
+		vp.LifecycleCancel()
 		err = p.client.DestroyMachine(ctx, vp.MachineID())
 		if err != nil {
 			log.G(ctx).Infof("Error destroying instance: %v", err)
@@ -300,7 +301,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 		delete(p.virtualPods, key)
 	}
 
-	// p.notifier(pod)
+	p.notifyPodUpdate(pod)
 
 	return nil
 }
@@ -403,8 +404,15 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 			p.notifyPodUpdate(vp.Pod())
 		}
 
+		statusLabel := "Failed"
+		if update.Succeeded {
+			statusLabel = "Succeeded"
+		}
+
 		if update.Restarts {
-			err := restartBackoff(ctx, update.Backoff)
+			p.metrics.containerRestarts.WithLabelValues(statusLabel).Inc()
+			p.metrics.podsRunning.Dec()
+			err = restartBackoff(ctx, update.Backoff)
 			if err != nil {
 				return
 			}
@@ -421,6 +429,9 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 		}
 
 		if update.Terminated {
+			p.metrics.podsByPhase.WithLabelValues(statusLabel).Inc()
+			p.metrics.podsRunning.Dec()
+
 			p.mutex.Lock()
 			delete(p.virtualPods, vp.ID())
 			p.mutex.Unlock()

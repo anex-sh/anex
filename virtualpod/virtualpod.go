@@ -135,6 +135,7 @@ func readContainerState(cs *v1.ContainerState) (x ContainerState) {
 type StatusUpdate struct {
 	Changed    bool
 	Terminated bool
+	Succeeded  bool
 	Restarts   bool
 	Backoff    time.Duration
 }
@@ -174,6 +175,7 @@ func (vp *VirtualPod) PodStatusUpdate(ctx context.Context, httpClient *retryable
 	if newState == ContainerStateTerminated {
 		vp.handleContainerTermination(newStateRaw)
 		restarts := vp.podShouldRestart()
+		containerSucceeded := vp.pod.Status.ContainerStatuses[0].State.Terminated.ExitCode == 0
 
 		if restarts {
 			var backoff time.Duration
@@ -190,13 +192,15 @@ func (vp *VirtualPod) PodStatusUpdate(ctx context.Context, httpClient *retryable
 			vp.handleContainerRestart(backoff > 0)
 
 			return StatusUpdate{
-				Changed:  true,
-				Restarts: true,
-				Backoff:  backoff,
+				Changed:    true,
+				Terminated: false,
+				Succeeded:  containerSucceeded,
+				Restarts:   true,
+				Backoff:    backoff,
 			}, nil
 		}
 
-		if vp.pod.Status.ContainerStatuses[0].State.Terminated.ExitCode == 0 {
+		if containerSucceeded {
 			vp.pod.Status.Phase = v1.PodSucceeded
 		} else {
 			vp.pod.Status.Phase = v1.PodFailed
@@ -205,6 +209,7 @@ func (vp *VirtualPod) PodStatusUpdate(ctx context.Context, httpClient *retryable
 		return StatusUpdate{
 			Changed:    true,
 			Terminated: true,
+			Succeeded:  containerSucceeded,
 			Restarts:   false,
 		}, nil
 	}

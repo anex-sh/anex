@@ -16,11 +16,6 @@ import (
 type Metrics struct {
 	reg *prometheus.Registry
 
-	// existing metrics
-	requestsTotal   prometheus.Counter
-	inFlight        prometheus.Gauge
-	workLatencySecs prometheus.Histogram
-
 	// pod operation counters
 	getPodOperationsTotal       prometheus.Counter
 	getPodStatusOperationsTotal prometheus.Counter
@@ -29,6 +24,7 @@ type Metrics struct {
 	updatePodOperationsTotal    prometheus.Counter
 	deletePodOperationsTotal    prometheus.Counter
 
+	// TODO: Create struct for Virtual Pod, import it from there => and inject it back on status update
 	// pod info metrics
 	containerRestarts            *prometheus.CounterVec // label: result (Succeeded|Failed)
 	podsByPhase                  *prometheus.CounterVec // label: phase
