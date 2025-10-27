@@ -158,7 +158,7 @@ package_helm_chart_prod:
     - aws --version
     - echo "Helm registry login to $ECR_REGISTRY"
     - aws ecr get-login-password --region "$REGION" | helm registry login -u AWS --password-stdin "$ECR_REGISTRY"
-    - helm package deploy/chart --version "$VERSION" --app-version "$VERSION"
+    - helm package deploy/chart --version "$VERSION" --app-version "v$VERSION"
     - CHART_FILE="gpu-provider-$VERSION.tgz"
     - echo "Pushing $CHART_FILE to oci://$ECR_REGISTRY/helm"
     - helm push "$CHART_FILE" "oci://$ECR_REGISTRY/helm"
