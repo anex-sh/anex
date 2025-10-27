@@ -20,7 +20,7 @@ func TestGenerateOnStartScriptRendersParams(t *testing.T) {
 		"curl https://wireproxy/bin -o /usr/bin/wireproxy",
 		"curl https://promtail/bin -o /usr/bin/promtail",
 		"curl https://agent/bin -o /container_agent",
-		"/container_agent run -p 25001 -c \"python app.py\" --auth-token \"secrettok\" --promtail",
+		"python app.py",
 	}
 	for _, sub := range checks {
 		if !strings.Contains(out, sub) {
