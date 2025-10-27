@@ -128,7 +128,7 @@ func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.Machin
 	return candidatesID, nil
 }
 
-func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, authToken string) (machineID string, err error) {
+func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, authToken string, proxy, promtail bool) (machineID string, err error) {
 	logger := log.G(ctx)
 
 	if len(candidatesID) == 0 {
@@ -144,13 +144,23 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 	sort.Ints(ports)
 
 	// TODO: Do not hardcode URLs
-	agentURL := "https://glami-gpu-provider.glami-ml.com/container_agent_v0.1.3?token=cSrYDWSRTawnkIup"
+	agentURL := "https://glami-gpu-provider.glami-ml.com/container_agent_v0.1.4?token=cSrYDWSRTawnkIup"
 	wireproxyURL := "https://glami-gpu-provider.glami-ml.com/wireproxy?token=cSrYDWSRTawnkIup"
 	promtailURL := "https://glami-gpu-provider.glami-ml.com/promtail?token=cSrYDWSRTawnkIup"
 
+	containerCommand := strings.Join(pod.Spec.Containers[0].Command, " ")
+	commandWrapper := fmt.Sprintf("/container_agent run -p 25001 -c \"%s\" --auth-token \"%s\"", containerCommand, authToken)
+	if proxy {
+		commandWrapper += " --proxy"
+	}
+
+	if promtail {
+		commandWrapper += " --promtail"
+	}
+
 	params := OnStartTemplateParams{
 		Workdir:      pod.Spec.Containers[0].WorkingDir,
-		Command:      strings.Join(pod.Spec.Containers[0].Command, " "),
+		Command:      commandWrapper,
 		AgentURL:     agentURL,
 		WireproxyURL: wireproxyURL,
 		PromtailURL:  promtailURL,

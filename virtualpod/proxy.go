@@ -3,6 +3,7 @@ package virtualpod
 import (
 	"bytes"
 	"context"
+	"errors"
 	"sort"
 	"text/template"
 
@@ -75,6 +76,10 @@ func (vp *VirtualPod) generateWireproxyConfig(ctx context.Context) (string, erro
 	defer vp.mutex.RUnlock()
 	logger := log.G(ctx)
 
+	if vp.proxyConfig == nil {
+		return "", errors.New("proxy config not set")
+	}
+
 	// Open Ports
 	var ports []int
 	for _, cp := range vp.pod.Spec.Containers[0].Ports {
@@ -102,7 +107,7 @@ func (vp *VirtualPod) generateWireproxyConfig(ctx context.Context) (string, erro
 	}
 
 	params := OnStartTemplateParams{
-		ProxyConfig:    vp.proxyConfig,
+		ProxyConfig:    *vp.proxyConfig,
 		ContainerPorts: ports,
 		ProxyTunnels:   proxyTunnels,
 	}

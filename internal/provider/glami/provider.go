@@ -95,6 +95,7 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 	}
 
 	// Configure cloud provider - currently only VastAI is supported
+	// TODO: Pass hardcoded URL for binary distros
 	provider.client = vastai.NewClient("https://console.vast.ai/api/v0", config.CloudProvider.VastAI.APIKey, clusterUUID, config.VirtualNode.NodeName)
 
 	ctx := context.Background()
@@ -191,13 +192,16 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		return fmt.Errorf("Glami Provider does not support multiple containers")
 	}
 
-	cfg, err := p.getProxyConfigForVirtualPod()
-	if err != nil {
-		return err
-	}
-	proxyConfig := virtualpod.ProxyConfig{
-		Server: p.serverProxySettings,
-		Client: *cfg,
+	var proxyConfig *virtualpod.ProxyConfig
+	if p.config.Proxy.Enable {
+		cfg, err := p.getProxyConfigForVirtualPod()
+		if err != nil {
+			return err
+		}
+		proxyConfig = &virtualpod.ProxyConfig{
+			Server: p.serverProxySettings,
+			Client: *cfg,
+		}
 	}
 
 	now := metav1.NewTime(time.Now())
@@ -286,6 +290,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
+	// TODO: Change to sending SIGTERM, setting status Terminated, notify update
 	if vp.ProvisioningCompleted() {
 		p.metrics.podsRunning.Dec()
 		vp.LifecycleCancel()
@@ -412,9 +417,14 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 		if update.Restarts {
 			p.metrics.containerRestarts.WithLabelValues(statusLabel).Inc()
 			p.metrics.podsRunning.Dec()
-			err = restartBackoff(ctx, update.Backoff)
-			if err != nil {
-				return
+
+			if update.Backoff > 0 {
+				err = restartBackoff(ctx, update.Backoff)
+				if err != nil {
+					return
+				}
+				vp.CrashLoopBackOffDone()
+				p.notifyPodUpdate(vp.Pod())
 			}
 
 			restartCtx, restartCancel := context.WithCancel(p.baseContext)
@@ -432,6 +442,9 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 			p.metrics.podsByPhase.WithLabelValues(statusLabel).Inc()
 			p.metrics.podsRunning.Dec()
 
+			key := buildKey(vp.Pod())
+			p.virtualPods[key].LifecycleCancel()
+
 			p.mutex.Lock()
 			delete(p.virtualPods, vp.ID())
 			p.mutex.Unlock()
@@ -441,6 +454,9 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 			p.client.DestroyMachine(ctx, machineID)
 		}
 	}
+
+	// Likely already running at this point
+	reconcile()
 
 	for {
 		select {

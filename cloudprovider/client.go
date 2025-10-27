@@ -11,7 +11,7 @@ type Client interface {
 	GetRentalCandidates(ctx context.Context, specs virtualpod.MachineSpecification) ([]string, error)
 	ListMachines(ctx context.Context) ([]*virtualpod.Machine, error)
 	GetMachine(ctx context.Context, machineID string) (machine *virtualpod.Machine, err error)
-	ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, authToken string) (machineID string, err error)
+	ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, authToken string, proxy, promtail bool) (machineID string, err error)
 	DestroyMachine(ctx context.Context, id string) error
 	PruneDanglingMachines(ctx context.Context, podUIDs []string) error
 	RestartMachine(ctx context.Context, id string, pullImage bool) error

@@ -181,24 +181,29 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			return ErrMachineFailed
 		}
 
-		err = vp.PushWireproxyConfig(agentCtx, client)
-		if err != nil {
-			logger.Error("Failed to push wireproxy config")
-			p.metrics.podsProvisioningTotal.WithLabelValues("false", "wireproxy_config_push_fail").Inc()
-			return ErrMachineFailed
+		if p.config.Proxy.Enable {
+			err = vp.PushWireproxyConfig(agentCtx, client)
+			if err != nil {
+				logger.Error("Failed to push wireproxy config")
+				p.metrics.podsProvisioningTotal.WithLabelValues("false", "wireproxy_config_push_fail").Inc()
+				return ErrMachineFailed
+			}
 		}
 
-		// TODO: Implement multiple clients
-		lokiConfig := virtualpod.LokiPushGateway{
-			URL:      p.config.Promtail.Clients[0].URL,
-			Username: p.config.Promtail.Clients[0].BasicAuth.Username,
-			Password: p.config.Promtail.Clients[0].BasicAuth.Password,
-		}
-		err = vp.PushPromtailConfig(agentCtx, client, lokiConfig)
-		if err != nil {
-			logger.Error("Failed to start command")
-			p.metrics.podsProvisioningTotal.WithLabelValues("false", "cmd_start_fail").Inc()
-			return ErrMachineFailed
+		if p.config.Promtail.Enable {
+			// TODO: Implement multiple clients
+			lokiConfig := virtualpod.LokiPushGateway{
+				URL:      p.config.Promtail.Clients[0].URL,
+				Username: p.config.Promtail.Clients[0].BasicAuth.Username,
+				Password: p.config.Promtail.Clients[0].BasicAuth.Password,
+			}
+
+			err = vp.PushPromtailConfig(agentCtx, client, lokiConfig)
+			if err != nil {
+				logger.Error("Failed to start command")
+				p.metrics.podsProvisioningTotal.WithLabelValues("false", "cmd_start_fail").Inc()
+				return ErrMachineFailed
+			}
 		}
 
 		err = vp.RunCommand(agentCtx, client)
@@ -254,7 +259,7 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, a
 		}
 		p.mutex.RUnlock()
 
-		machineID, err = p.client.ProvisionMachine(ctx, candidatesFiltered, pod, authToken)
+		machineID, err = p.client.ProvisionMachine(ctx, candidatesFiltered, pod, authToken, p.config.Proxy.Enable, p.config.Promtail.Enable)
 		if errors.Is(err, utils.ErrBadPayload) || errors.Is(err, utils.ErrUnauthorized) {
 			p.metrics.podsProvisioningTotal.WithLabelValues("false", "provisioning_call_failed").Inc()
 			return backoff.Permanent(err)

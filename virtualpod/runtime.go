@@ -60,10 +60,6 @@ func (vp *VirtualPod) pushFile(ctx context.Context, httpClient *retryablehttp.Cl
 }
 
 func (vp *VirtualPod) PushEnvVars(ctx context.Context, httpClient *retryablehttp.Client) error {
-	if vp.volumeMounts == nil || len(vp.configMaps) == 0 {
-		return nil
-	}
-
 	if httpClient == nil {
 		return fmt.Errorf("httpClient is nil")
 	}

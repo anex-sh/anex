@@ -22,10 +22,11 @@ type FileMapping struct {
 
 type VirtualPod struct {
 	mutex                   sync.RWMutex
+	name                    string
 	id                      string
 	pod                     *v1.Pod
 	machine                 *Machine
-	proxyConfig             ProxyConfig
+	proxyConfig             *ProxyConfig
 	provisioningCompleted   bool
 	readySince              time.Time
 	effectiveRestartCounter uint
@@ -37,8 +38,9 @@ type VirtualPod struct {
 	volumeMounts            []FileMapping
 }
 
-func NewVirtualPod(id string, pod *v1.Pod, machine *Machine, proxyConfig ProxyConfig, configMaps map[string]map[string]string, volumeMounts []FileMapping, authToken string) *VirtualPod {
+func NewVirtualPod(id string, pod *v1.Pod, machine *Machine, proxyConfig *ProxyConfig, configMaps map[string]map[string]string, volumeMounts []FileMapping, authToken string) *VirtualPod {
 	return &VirtualPod{
+		name:         pod.Name,
 		id:           id,
 		pod:          pod,
 		machine:      machine,
@@ -162,6 +164,7 @@ func (vp *VirtualPod) PodStatusUpdate(ctx context.Context, httpClient *retryable
 
 	if newState == ContainerStateRunning {
 		vp.handleContainerStart(newStateRaw)
+		vp.pod.Status.Phase = v1.PodRunning
 		return StatusUpdate{
 			Changed: true,
 		}, nil
@@ -170,6 +173,7 @@ func (vp *VirtualPod) PodStatusUpdate(ctx context.Context, httpClient *retryable
 	// Container terminated before we pulled a running state
 	if lastState == ContainerStateWaiting && newState == ContainerStateTerminated {
 		vp.handleContainerStart(newStateRaw)
+		vp.pod.Status.Phase = v1.PodRunning
 	}
 
 	if newState == ContainerStateTerminated {
@@ -184,7 +188,9 @@ func (vp *VirtualPod) PodStatusUpdate(ctx context.Context, httpClient *retryable
 			if exitCode == 0 || time.Since(vp.readySince) > 10*time.Minute {
 				vp.effectiveRestartCounter = 0
 			} else {
-				backoff = time.Duration(10 * math.Pow(2, float64(vp.effectiveRestartCounter)))
+				if vp.effectiveRestartCounter > 0 {
+					backoff = time.Duration(10*math.Pow(2, float64(vp.effectiveRestartCounter-1))) * time.Second
+				}
 				vp.effectiveRestartCounter += 1
 			}
 
@@ -272,8 +278,6 @@ func (vp *VirtualPod) handleContainerStart(newContainerState v1.ContainerState) 
 
 func (vp *VirtualPod) handleContainerTermination(newContainerState v1.ContainerState) {
 	vp.pod.Status.ContainerStatuses[0].Ready = false
-	vp.pod.Status.ContainerStatuses[0].LastTerminationState = vp.pod.Status.ContainerStatuses[0].State
-
 	vp.pod.Status.ContainerStatuses[0].State = v1.ContainerState{
 		Terminated: &v1.ContainerStateTerminated{
 			ExitCode:   newContainerState.Terminated.ExitCode,
@@ -282,6 +286,8 @@ func (vp *VirtualPod) handleContainerTermination(newContainerState v1.ContainerS
 			FinishedAt: newContainerState.Terminated.FinishedAt,
 		},
 	}
+
+	vp.pod.Status.ContainerStatuses[0].LastTerminationState = vp.pod.Status.ContainerStatuses[0].State
 
 	vp.setCondition(v1.ContainersReady, v1.ConditionFalse)
 	vp.setCondition(v1.PodReady, v1.ConditionFalse)
@@ -292,12 +298,23 @@ func (vp *VirtualPod) handleContainerRestart(backoff bool) {
 
 	vp.pod.Status.ContainerStatuses[0].State = v1.ContainerState{
 		Waiting: &v1.ContainerStateWaiting{
-			Message: "Container restarting",
+			Reason:  "ContainerCreating",
+			Message: "container restarts",
 		},
 	}
 	if backoff {
 		vp.pod.Status.ContainerStatuses[0].State.Waiting.Reason = "CrashLoopBackOff"
 	}
+}
+
+func (vp *VirtualPod) CrashLoopBackOffDone() {
+	vp.mutex.RLock()
+	defer vp.mutex.RUnlock()
+
+	if vp.pod.Status.ContainerStatuses[0].State.Waiting == nil {
+		return
+	}
+	vp.pod.Status.ContainerStatuses[0].State.Waiting.Reason = "ContainerCreating"
 }
 
 func (vp *VirtualPod) FailPod(err error) {

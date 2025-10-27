@@ -26,7 +26,6 @@ func GenerateOnStartScript(params OnStartTemplateParams) string {
 	return buf.String()
 }
 
-// TODO: Make Promtail optional
 const onStartScriptTemplate = `
 #!/bin/bash
 set -euo pipefail
@@ -48,5 +47,5 @@ chmod +x /usr/bin/wireproxy
 chmod +x /usr/bin/promtail
 chmod +x /container_agent
 
-/container_agent run -p 25001 -c "{{ .Command }}" --auth-token "{{ .AuthToken }}" --promtail
+{{ .Command }}
 `
