@@ -336,7 +336,7 @@ func loadConfig(providerConfig string) (config ProviderConfig, err error) {
 func (p *Provider) loadProxyConfig() error {
 	type WireguardKeys struct {
 		virtualpod.ProxyServerConfig `yaml:"server"`
-		Peers                        []virtualpod.ProxyClientConfig `yaml:"peers"`
+		Peers                        []*virtualpod.ProxyClientConfig `yaml:"peers"`
 	}
 
 	proxyConfigPath := p.config.Proxy.ConfigPath

@@ -26,7 +26,7 @@ func newHTTPClientReturning(status int) *retryablehttp.Client {
 func TestRunCommandCallsAgentEndpoint(t *testing.T) {
 	pod := newTestPod()
 	m := &Machine{PublicIP: "127.0.0.1", AgentPort: 65535}
-	_ = NewVirtualPod("id1", pod, m, &ProxyConfig{}, nil, nil, "tok")
+	_ = NewVirtualPod("id1", pod, m, &ProxyConfig{}, 0, nil, nil, "tok")
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	_ = ctx

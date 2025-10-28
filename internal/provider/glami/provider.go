@@ -38,7 +38,7 @@ type Provider struct {
 	client                cloudprovider.Client
 	rc                    *retryablehttp.Client
 	serverProxySettings   virtualpod.ProxyServerConfig
-	clientProxySettings   []virtualpod.ProxyClientConfig
+	clientProxySettings   []*virtualpod.ProxyClientConfig
 	baseContext           context.Context
 	provisioningWG        sync.WaitGroup
 	mutex                 sync.RWMutex
@@ -163,17 +163,17 @@ func (p *Provider) ProvisioningWG() *sync.WaitGroup {
 	return &p.provisioningWG
 }
 
-func (p *Provider) getProxyConfigForVirtualPod() (*virtualpod.ProxyClientConfig, error) {
-	for _, proxy := range p.clientProxySettings {
+func (p *Provider) getProxyConfigForVirtualPod() (int, *virtualpod.ProxyClientConfig, error) {
+	for idx, proxy := range p.clientProxySettings {
 		if proxy.Assigned {
 			continue
 		}
 
 		proxy.Assigned = true
-		return &proxy, nil
+		return idx, proxy, nil
 	}
 
-	return nil, fmt.Errorf("no proxy keys available")
+	return 0, nil, fmt.Errorf("no proxy keys available")
 }
 
 // CreatePod accepts a pod definition and stores it in memory.
@@ -192,17 +192,24 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		return fmt.Errorf("Glami Provider does not support multiple containers")
 	}
 
+	// TODO: Refactor proxy
+	var err error
+	var proxyIndex int
 	var proxyConfig *virtualpod.ProxyConfig
+	var clientConfig *virtualpod.ProxyClientConfig
+
+	p.mutex.Lock()
 	if p.config.Proxy.Enable {
-		cfg, err := p.getProxyConfigForVirtualPod()
+		proxyIndex, clientConfig, err = p.getProxyConfigForVirtualPod()
 		if err != nil {
 			return err
 		}
 		proxyConfig = &virtualpod.ProxyConfig{
 			Server: p.serverProxySettings,
-			Client: *cfg,
+			Client: *clientConfig,
 		}
 	}
+	p.mutex.Unlock()
 
 	now := metav1.NewTime(time.Now())
 	pod.Status = v1.PodStatus{
@@ -237,7 +244,7 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	key := buildKey(pod)
 	createCtx, cancel := context.WithCancel(p.baseContext)
 
-	vp := virtualpod.NewVirtualPod(key, pod, &virtualpod.Machine{}, proxyConfig, configMaps, mountPaths, p.config.AgentAuthToken)
+	vp := virtualpod.NewVirtualPod(key, pod, &virtualpod.Machine{}, proxyConfig, proxyIndex, configMaps, mountPaths, p.config.AgentAuthToken)
 	vp.ProvisionCancel = cancel
 	p.virtualPods[key] = vp
 
@@ -258,12 +265,12 @@ func (p *Provider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 
 	log.G(ctx).Infof("receive UpdatePod %q", pod.Name)
 
-	//key, err := buildKey(pod)
-	//if err != nil {
-	//	return err
-	//}
-	// TODO: Fix update
-	// p.notifier(pod)
+	key := buildKey(pod)
+	p.mutex.Lock()
+	p.virtualPods[key].UpdatePod(pod)
+	p.mutex.Unlock()
+
+	p.notifyPodUpdate(pod)
 
 	return nil
 }
@@ -306,6 +313,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 		delete(p.virtualPods, key)
 	}
 
+	p.clientProxySettings[vp.ProxySlot()].Assigned = false
 	p.notifyPodUpdate(pod)
 
 	return nil

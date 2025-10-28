@@ -27,6 +27,7 @@ type VirtualPod struct {
 	pod                     *v1.Pod
 	machine                 *Machine
 	proxyConfig             *ProxyConfig
+	proxySlot               int
 	provisioningCompleted   bool
 	readySince              time.Time
 	effectiveRestartCounter uint
@@ -38,13 +39,14 @@ type VirtualPod struct {
 	volumeMounts            []FileMapping
 }
 
-func NewVirtualPod(id string, pod *v1.Pod, machine *Machine, proxyConfig *ProxyConfig, configMaps map[string]map[string]string, volumeMounts []FileMapping, authToken string) *VirtualPod {
+func NewVirtualPod(id string, pod *v1.Pod, machine *Machine, proxyConfig *ProxyConfig, slot int, configMaps map[string]map[string]string, volumeMounts []FileMapping, authToken string) *VirtualPod {
 	return &VirtualPod{
 		name:         pod.Name,
 		id:           id,
 		pod:          pod,
 		machine:      machine,
 		proxyConfig:  proxyConfig,
+		proxySlot:    slot,
 		authHeader:   http.Header{"Authorization": []string{"Bearer " + authToken}},
 		configMaps:   configMaps,
 		volumeMounts: volumeMounts,
@@ -104,6 +106,16 @@ func (vp *VirtualPod) SetProvisioningCompleted() {
 	defer vp.mutex.Unlock()
 	vp.provisioningCompleted = true
 	vp.readySince = time.Now()
+}
+
+func (vp *VirtualPod) UpdatePod(pod *v1.Pod) {
+	vp.mutex.Lock()
+	defer vp.mutex.Unlock()
+	vp.pod = pod
+}
+
+func (vp *VirtualPod) ProxySlot() int {
+	return vp.proxySlot
 }
 
 func (vp *VirtualPod) ImagePullAlways() bool {

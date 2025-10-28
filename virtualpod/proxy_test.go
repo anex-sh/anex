@@ -20,6 +20,7 @@ func TestGenerateWireproxyConfigRendersPortsAndTunnels(t *testing.T) {
 		pod,
 		&Machine{PublicIP: "1.2.3.4", AgentPort: 1234},
 		&ProxyConfig{Client: ProxyClientConfig{GatewayPortOffset: 32000}},
+		0,
 		cfgMaps, []FileMapping{{
 			TargetPath:    "/etc/virtualpod/proxy.conf",
 			ConfigMapName: "proxy",
