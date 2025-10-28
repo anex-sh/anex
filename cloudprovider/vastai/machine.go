@@ -89,6 +89,10 @@ func buildInstanceFilters(s virtualpod.MachineSpecification) map[string]map[stri
 		filters["gpu_ram"] = FilterOp{"gte": s.MemoryPerGPUMB}
 	}
 
+	if s.TFLOPSMin > 0 {
+		filters["total_flops"] = FilterOp{"gt": s.TFLOPSMin}
+	}
+
 	if s.CudaAvailable > 0 {
 		filters["cuda_max_good"] = FilterOp{"gte": s.CudaAvailable}
 	}

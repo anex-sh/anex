@@ -26,6 +26,7 @@ const (
 type MachineSpecification struct {
 	GPUCount        int
 	MemoryPerGPUMB  int
+	TFLOPSMin       float64
 	CudaAvailable   float64
 	CPUCores        int
 	CPURamMB        int

@@ -464,7 +464,7 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 	}
 
 	// Likely already running at this point
-	reconcile()
+	// reconcile()
 
 	for {
 		select {

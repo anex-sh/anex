@@ -61,6 +61,10 @@ func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 				if q, err := resource.ParseQuantity(value); err == nil {
 					out.MemoryPerGPUMB = int(q.Value() / (1024 * 1024)) // Convert to MB
 				}
+			case "tflops-min":
+				if tflops, err := strconv.ParseFloat(value, 64); err == nil {
+					out.TFLOPSMin = tflops
+				}
 			case "min-cuda":
 				if cuda, err := strconv.ParseFloat(value, 64); err == nil {
 					out.CudaAvailable = cuda
