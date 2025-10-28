@@ -57,10 +57,16 @@ func (vp *VirtualPod) ID() string {
 	return vp.id
 }
 
-func (vp *VirtualPod) MachineID() string {
+func (vp *VirtualPod) MachineRentID() string {
 	vp.mutex.RLock()
 	defer vp.mutex.RUnlock()
 	return vp.machine.ID
+}
+
+func (vp *VirtualPod) MachineStableID() string {
+	vp.mutex.RLock()
+	defer vp.mutex.RUnlock()
+	return vp.machine.MachineID
 }
 
 func (vp *VirtualPod) SetMachine(machine *Machine) {

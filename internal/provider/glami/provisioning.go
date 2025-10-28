@@ -90,8 +90,8 @@ func (p *Provider) machineCleanup(ctx context.Context, vp *virtualpod.VirtualPod
 	defer cancel()
 
 	if !vp.ProvisioningCompleted() {
-		if vp.MachineID() != "" {
-			destroyErr := p.client.DestroyMachine(cleanupCtx, vp.MachineID())
+		if vp.MachineRentID() != "" {
+			destroyErr := p.client.DestroyMachine(cleanupCtx, vp.MachineRentID())
 			if destroyErr != nil {
 				log.G(ctx).Errorf("Error destroying instance: %v", destroyErr)
 			}
@@ -122,7 +122,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 	// TODO: Enhance with Kubernetes events
 	op := func() error {
 		if restartOnly {
-			machineID = vp.MachineID()
+			machineID = vp.MachineRentID()
 			err = p.restartPod(ctx, machineID, vp.ImagePullAlways())
 		} else {
 			machineID, err = p.selectAndProvisionMachine(ctx, vp.Pod(), vp.AuthToken())
@@ -137,13 +137,13 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			})
 		}
 
-		p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeNormal, "Provisioning", "Provisioning machine ID: %s", vp.MachineID())
+		p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeNormal, "Provisioning", "Provisioning machine ID: %s", vp.MachineRentID())
 
 		err = p.waitForMachineReady(ctx, vp)
 		if err != nil {
 			if errors.Is(err, ErrMachineFailed) || errors.Is(err, context.DeadlineExceeded) {
 				p.mutex.Lock()
-				p.machineBans[machineID] = time.Now()
+				p.machineBans[vp.MachineStableID()] = time.Now()
 				_ = p.persistMachineBansToFile()
 				p.mutex.Unlock()
 				restartOnly = false
@@ -244,8 +244,8 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, a
 	bo := backoff.NewConstantBackOff(60 * time.Second)
 	op := func() error {
 		machineSpec := newMachineSpecification(pod)
-		var candidates []string
-		candidates, err = p.client.GetRentalCandidates(ctx, machineSpec)
+		var offers []virtualpod.Offer
+		offers, err = p.client.GetRentalCandidates(ctx, machineSpec)
 		if err != nil {
 			p.metrics.podsProvisioningTotal.WithLabelValues("false", "rental_candidates_search_failed").Inc()
 			logger.Error(err)
@@ -256,9 +256,9 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, a
 		var candidatesFiltered []string
 		banDuration := time.Duration(p.config.GetMachineBanDuration()) * time.Second
 		p.mutex.RLock()
-		for _, candidate := range candidates {
-			if banTime, banned := p.machineBans[candidate]; !banned || (banDuration > 0 && time.Since(banTime) > banDuration) {
-				candidatesFiltered = append(candidatesFiltered, candidate)
+		for _, offer := range offers {
+			if banTime, banned := p.machineBans[offer.MachineID]; !banned || (banDuration > 0 && time.Since(banTime) > banDuration) {
+				candidatesFiltered = append(candidatesFiltered, offer.OfferID)
 			}
 		}
 		p.mutex.RUnlock()
@@ -278,7 +278,7 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, a
 
 func (p *Provider) waitForMachineReady(ctx context.Context, vp *virtualpod.VirtualPod) error {
 	logger := log.G(ctx)
-	logger.Infof("Waiting for machine to be running: %s", vp.MachineID())
+	logger.Infof("Waiting for machine to be running: %s", vp.MachineRentID())
 
 	retryCtx, cancel := context.WithTimeout(ctx, p.config.GetStartupTimeout())
 	defer cancel()
@@ -291,7 +291,7 @@ func (p *Provider) waitForMachineReady(ctx context.Context, vp *virtualpod.Virtu
 			return err
 		}
 
-		machine, err := p.client.GetMachine(retryCtx, vp.MachineID())
+		machine, err := p.client.GetMachine(retryCtx, vp.MachineRentID())
 		if err != nil {
 			return err
 		}

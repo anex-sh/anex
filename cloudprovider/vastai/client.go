@@ -107,25 +107,28 @@ func sortCandidates(candidates []BundleOffer) []BundleOffer {
 	return candidates
 }
 
-func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.MachineSpecification) ([]string, error) {
+func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.MachineSpecification) ([]virtualpod.Offer, error) {
 	// url := c.baseURL + "/search/asks/"
 	url := c.baseURL + "/bundles/"
-	var candidatesID []string
+	var offers []virtualpod.Offer
 
 	filters := buildInstanceFilters(spec)
 	// _, bundleOffer, err := cloudprovider.MakeRequest[BundleOffers](ctx, c.retryClient, http.MethodPut, url, filters, c.authHeader)
 	_, bundleOffer, err := utils.MakeRequest[BundleOffers](ctx, c.retryClient, http.MethodPost, url, filters, c.authHeader)
 	if err != nil {
-		return candidatesID, err
+		return offers, err
 	}
 	candidates := bundleOffer.Offers
 	candidatesSorted := sortCandidates(candidates)
 
 	for candidate := range candidatesSorted {
-		candidatesID = append(candidatesID, strconv.Itoa(candidates[candidate].ID))
+		offers = append(offers, virtualpod.Offer{
+			OfferID:   strconv.Itoa(candidates[candidate].ID),
+			MachineID: strconv.Itoa(candidates[candidate].MachineID),
+		})
 	}
 
-	return candidatesID, nil
+	return offers, nil
 }
 
 func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, authToken string, proxy, promtail bool) (machineID string, err error) {

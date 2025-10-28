@@ -301,7 +301,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 	if vp.ProvisioningCompleted() {
 		p.metrics.podsRunning.Dec()
 		vp.LifecycleCancel()
-		err = p.client.DestroyMachine(ctx, vp.MachineID())
+		err = p.client.DestroyMachine(ctx, vp.MachineRentID())
 		if err != nil {
 			log.G(ctx).Infof("Error destroying instance: %v", err)
 			return err
@@ -457,7 +457,7 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 			delete(p.virtualPods, vp.ID())
 			p.mutex.Unlock()
 
-			machineID := vp.MachineID()
+			machineID := vp.MachineRentID()
 			// TODO: Implement retry
 			p.client.DestroyMachine(ctx, machineID)
 		}

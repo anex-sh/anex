@@ -14,6 +14,7 @@ type PortInfo struct {
 
 type Machine struct {
 	ID            int                   `json:"id"`
+	MachineID     int                   `json:"machine_id"`
 	PublicIP      string                `json:"public_ipaddr"`
 	ActualStatus  string                `json:"actual_status"`
 	StatusMessage string                `json:"status_msg"`
@@ -25,6 +26,7 @@ type Machine struct {
 func GenericMachineAdapter(vastAIMachine *Machine) *virtualpod.Machine {
 	machine := &virtualpod.Machine{}
 	machine.ID = strconv.Itoa(vastAIMachine.ID)
+	machine.MachineID = strconv.Itoa(vastAIMachine.MachineID)
 	machine.PublicIP = vastAIMachine.PublicIP
 
 	if vastAIMachine.ActualStatus == "running" {

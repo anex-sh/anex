@@ -35,8 +35,14 @@ type MachineSpecification struct {
 	Regions         []Region
 }
 
+type Offer struct {
+	OfferID   string
+	MachineID string
+}
+
 type Machine struct {
 	ID        string
+	MachineID string
 	PublicIP  string
 	AgentPort int
 	State     MachineState
