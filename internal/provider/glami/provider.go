@@ -299,21 +299,23 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 
 	// TODO: Change to sending SIGTERM, setting status Terminated, notify update
 	if vp.ProvisioningCompleted() {
-		p.metrics.podsRunning.Dec()
-		vp.LifecycleCancel()
-		err = p.client.DestroyMachine(ctx, vp.MachineRentID())
-		if err != nil {
-			log.G(ctx).Infof("Error destroying instance: %v", err)
-			return err
+		if !vp.Finalized() {
+			p.metrics.podsRunning.Dec()
+			vp.LifecycleCancel()
+			p.clientProxySettings[vp.ProxySlot()].Assigned = false
+			err = p.client.DestroyMachine(p.baseContext, vp.MachineRentID())
+			if err != nil {
+				log.G(ctx).Infof("Error destroying instance: %v", err)
+				return err
+			}
 		}
-
 		delete(p.virtualPods, key)
 	} else {
 		vp.ProvisionCancel()
+		p.clientProxySettings[vp.ProxySlot()].Assigned = false
 		delete(p.virtualPods, key)
 	}
 
-	p.clientProxySettings[vp.ProxySlot()].Assigned = false
 	p.notifyPodUpdate(pod)
 
 	return nil
@@ -450,16 +452,16 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 			p.metrics.podsByPhase.WithLabelValues(statusLabel).Inc()
 			p.metrics.podsRunning.Dec()
 
+			p.mutex.Lock()
 			key := buildKey(vp.Pod())
 			p.virtualPods[key].LifecycleCancel()
-
-			p.mutex.Lock()
-			delete(p.virtualPods, vp.ID())
+			p.clientProxySettings[vp.ProxySlot()].Assigned = false
+			vp.Finalize()
 			p.mutex.Unlock()
 
 			machineID := vp.MachineRentID()
 			// TODO: Implement retry
-			p.client.DestroyMachine(ctx, machineID)
+			p.client.DestroyMachine(p.baseContext, machineID)
 		}
 	}
 

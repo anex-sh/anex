@@ -26,6 +26,7 @@ type VirtualPod struct {
 	id                      string
 	pod                     *v1.Pod
 	machine                 *Machine
+	finalized               bool
 	proxyConfig             *ProxyConfig
 	proxySlot               int
 	provisioningCompleted   bool
@@ -79,6 +80,18 @@ func (vp *VirtualPod) RemoveMachine() {
 	vp.mutex.RLock()
 	defer vp.mutex.RUnlock()
 	vp.machine = &Machine{}
+}
+
+func (vp *VirtualPod) Finalize() {
+	vp.mutex.RLock()
+	defer vp.mutex.RUnlock()
+	vp.finalized = true
+}
+
+func (vp *VirtualPod) Finalized() bool {
+	vp.mutex.RLock()
+	defer vp.mutex.RUnlock()
+	return vp.finalized
 }
 
 func (vp *VirtualPod) Pod() *v1.Pod {
