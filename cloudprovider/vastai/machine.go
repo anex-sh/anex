@@ -92,7 +92,11 @@ func buildInstanceFilters(s virtualpod.MachineSpecification) map[string]map[stri
 	}
 
 	if s.TFLOPSMin > 0 {
-		filters["total_flops"] = FilterOp{"gt": s.TFLOPSMin}
+		filters["total_flops"] = FilterOp{"gte": s.TFLOPSMin}
+	}
+
+	if s.DLPerfMin > 0 {
+		filters["dlperf"] = FilterOp{"gte": s.DLPerfMin}
 	}
 
 	if s.CudaAvailable > 0 {

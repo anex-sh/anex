@@ -65,6 +65,10 @@ func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 				if tflops, err := strconv.ParseFloat(value, 64); err == nil {
 					out.TFLOPSMin = tflops
 				}
+			case "dlperf-min":
+				if dlperf, err := strconv.ParseFloat(value, 64); err == nil {
+					out.DLPerfMin = dlperf
+				}
 			case "min-cuda":
 				if cuda, err := strconv.ParseFloat(value, 64); err == nil {
 					out.CudaAvailable = cuda
