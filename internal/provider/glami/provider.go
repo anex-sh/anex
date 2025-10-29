@@ -198,9 +198,10 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	var proxyConfig *virtualpod.ProxyConfig
 	var clientConfig *virtualpod.ProxyClientConfig
 
-	p.mutex.Lock()
 	if p.config.Proxy.Enable {
+		p.mutex.Lock()
 		proxyIndex, clientConfig, err = p.getProxyConfigForVirtualPod()
+		p.mutex.Unlock()
 		if err != nil {
 			return err
 		}
@@ -209,7 +210,6 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 			Client: *clientConfig,
 		}
 	}
-	p.mutex.Unlock()
 
 	now := metav1.NewTime(time.Now())
 	pod.Status = v1.PodStatus{
