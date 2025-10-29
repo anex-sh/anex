@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"gitlab.devklarka.cz/ai/gpu-provider/internal/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -151,7 +152,7 @@ const (
 	ContainerStateTerminated ContainerState = "Terminated"
 )
 
-func readContainerState(cs *v1.ContainerState) (x ContainerState) {
+func readContainerState(ctx context.Context, cs *v1.ContainerState) (x ContainerState) {
 	switch {
 	case cs.Waiting != nil:
 		return ContainerStateWaiting
@@ -161,7 +162,9 @@ func readContainerState(cs *v1.ContainerState) (x ContainerState) {
 		return ContainerStateTerminated
 	default:
 		// Never happens; ContainerState is a union type
-		return ContainerStateTerminated
+		logger := log.G(ctx)
+		logger.Error("Unable to determine container state; ContainerState empty. Invalid!!!")
+		return ContainerStateWaiting
 	}
 }
 
@@ -184,8 +187,8 @@ func (vp *VirtualPod) PodStatusUpdate(ctx context.Context, httpClient *retryable
 		return StatusUpdate{}, err
 	}
 
-	lastState := readContainerState(&vp.pod.Status.ContainerStatuses[0].State)
-	newState := readContainerState(&newStateRaw)
+	lastState := readContainerState(ctx, &vp.pod.Status.ContainerStatuses[0].State)
+	newState := readContainerState(ctx, &newStateRaw)
 
 	if lastState == newState {
 		return StatusUpdate{

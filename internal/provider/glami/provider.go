@@ -298,7 +298,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 	ctx = addAttributes(ctx, span, namespaceKey, pod.Namespace, nameKey, pod.Name)
 
 	log.G(ctx).Infof("receive DeletePod %q", pod.Name)
-
+	
 	key := buildKey(pod)
 
 	vp, exists := p.virtualPods[key]
@@ -328,6 +328,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 		delete(p.virtualPods, key)
 	}
 
+	// TODO: Missing any pod update!
 	p.notifyPodUpdate(pod)
 
 	return nil

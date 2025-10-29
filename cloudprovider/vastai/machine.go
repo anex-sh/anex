@@ -80,6 +80,7 @@ func buildInstanceFilters(s virtualpod.MachineSpecification) map[string]interfac
 		"inet_down": FilterOp{"gt": 600},
 		"num_gpus":  FilterOp{"eq": 1},
 		"order":     [][]string{{"dph_total", "asc"}},
+		// "gpu_name":  map[string]interface{}{"in": []string{"RTX 4090"}},
 	}
 
 	// "external": FilterOp{"eq": false},
@@ -102,8 +103,10 @@ func buildInstanceFilters(s virtualpod.MachineSpecification) map[string]interfac
 		filters["dlperf"] = map[string]interface{}{"gte": s.DLPerfMin}
 	}
 
-	if s.CudaAvailable > 0 {
-		filters["cuda_max_good"] = FilterOp{"gte": s.CudaAvailable}
+	if s.CudaMax > 0 {
+		filters["cuda_max_good"] = FilterOp{"gte": "12.6", "lte": s.CudaMax}
+	} else {
+		filters["cuda_max_good"] = FilterOp{"gte": "12.6"}
 	}
 
 	//if s.CPUCores > 0 {

@@ -27,7 +27,7 @@ func (vp *VirtualPod) WaitForAgentReady(ctx context.Context, httpClient *retryab
 
 	logger.Infof("Waiting for agent to be ready on %s", url)
 	status, _, err := utils.MakeRequest[GenericResponse](ctx, httpClient, http.MethodGet, url, nil, headers)
-	logger.Errorf("Wait for Agent ready ended with status %s", status)
+	logger.Errorf("Wait for Agent ready ended with status %d", status)
 
 	return err
 }

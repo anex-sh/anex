@@ -28,7 +28,7 @@ type MachineSpecification struct {
 	MemoryPerGPUMB  int
 	TFLOPSMin       float64
 	DLPerfMin       float64
-	CudaAvailable   float64
+	CudaMax         float64
 	CPUCores        int
 	CPURamMB        int
 	DiskSpace       int

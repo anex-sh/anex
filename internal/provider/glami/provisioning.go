@@ -69,9 +69,9 @@ func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 				if dlperf, err := strconv.ParseFloat(value, 64); err == nil {
 					out.DLPerfMin = dlperf
 				}
-			case "min-cuda":
+			case "cuda-max":
 				if cuda, err := strconv.ParseFloat(value, 64); err == nil {
-					out.CudaAvailable = cuda
+					out.CudaMax = cuda
 				}
 			case "disk-space-gb":
 				if diskSpace, err := strconv.ParseInt(value, 10, 64); err == nil {
