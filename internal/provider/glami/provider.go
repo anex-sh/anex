@@ -3,6 +3,7 @@ package glami
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -109,6 +110,17 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 
 	// Load persisted machine bans if configured
 	if config.VirtualKubelet.Provisioning.MachineBansStore.LocalFile.Enable {
+
+		// TODO: Remove temporary init
+		if bansOverwrite := os.Getenv("BANS_OVERWRITE"); bansOverwrite != "" {
+			bansPath := provider.getBansFilePath()
+			if err := os.WriteFile(bansPath, []byte(bansOverwrite), 0o600); err != nil {
+				log.G(ctx).Errorf("failed to write bans overwrite to file: %v", err)
+			} else {
+				log.G(ctx).Infof("wrote BANS_OVERWRITE to %s", bansPath)
+			}
+		}
+
 		if err := provider.loadMachineBansFromFile(); err != nil {
 			log.G(ctx).Errorf("failed to load machine bans: %v", err)
 		}
