@@ -256,6 +256,10 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, a
 			return err
 		}
 
+		if len(offers) == 0 {
+			logger.Warn("No offers matching pod's criteria found!!!")
+		}
+
 		// Filter out banned machines
 		var candidatesFiltered []string
 		banDuration := time.Duration(p.config.GetMachineBanDuration()) * time.Second

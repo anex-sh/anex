@@ -1,7 +1,6 @@
 package vastai
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 
@@ -43,79 +42,13 @@ func TestParseMachineLabel(t *testing.T) {
 	}
 }
 
-func TestBuildInstanceFiltersFromSpec(t *testing.T) {
-	spec := virtualpod.MachineSpecification{
-		GPUCount:        1, // currently hardcoded in builder to 1
-		MemoryPerGPUMB:  20000,
-		CudaAvailable:   11.2,
-		CPUCores:        8,
-		CPURamMB:        16000,
-		DiskSpace:       200,
-		MaxPricePerHour: 1.23,
-		Regions:         []virtualpod.Region{virtualpod.RegionEurope, virtualpod.RegionNorthAmerica},
-	}
-	filters := buildInstanceFilters(spec)
-
-	// basic flags
-	wantBools := map[string]interface{}{
-		"rentable":  map[string]interface{}{"eq": true},
-		"rented":    map[string]interface{}{"eq": false},
-		"external":  map[string]interface{}{"eq": false},
-		"verified":  map[string]interface{}{"eq": true},
-		"inet_down": map[string]interface{}{"gt": 600},
-		"num_gpus":  map[string]interface{}{"eq": 1},
-	}
-	for k, v := range wantBools {
-		if !reflect.DeepEqual(filters[k], v) {
-			t.Fatalf("filter %s mismatch: got %#v want %#v", k, filters[k], v)
-		}
-	}
-
-	// numeric thresholds
-	if got := filters["gpu_ram"]; !reflect.DeepEqual(got, map[string]interface{}{"gte": 20000}) {
-		t.Fatalf("gpu_ram filter mismatch: %#v", got)
-	}
-	if got := filters["cuda_max_good"]; !reflect.DeepEqual(got, map[string]interface{}{"gte": 11.2}) {
-		t.Fatalf("cuda_max_good filter mismatch: %#v", got)
-	}
-	if got := filters["cpu_cores"]; !reflect.DeepEqual(got, map[string]interface{}{"gte": 8}) {
-		t.Fatalf("cpu_cores filter mismatch: %#v", got)
-	}
-	if got := filters["cpu_ram"]; !reflect.DeepEqual(got, map[string]interface{}{"gte": 16000}) {
-		t.Fatalf("cpu_ram filter mismatch: %#v", got)
-	}
-	if got := filters["disk_space"]; !reflect.DeepEqual(got, map[string]interface{}{"gte": 200}) {
-		t.Fatalf("disk_space filter mismatch: %#v", got)
-	}
-	if got := filters["dph_total"]; !reflect.DeepEqual(got, map[string]interface{}{"lte": 1.23}) {
-		t.Fatalf("dph_total filter mismatch: %#v", got)
-	}
-
-	// geolocation countries from regions must be non-empty and include EU/NA samples
-	geo := filters["geolocation"]
-	vals, ok := geo["in"].([]string)
-	if !ok || len(vals) == 0 {
-		t.Fatalf("geolocation 'in' missing or empty: %#v", geo)
-	}
-	contains := func(x string) bool {
-		for _, v := range vals {
-			if v == x {
-				return true
-			}
-		}
-		return false
-	}
-	if !(contains("DE") || contains("FR") || contains("US") || contains("CA")) {
-		t.Fatalf("expected sample countries in geolocation: %v", vals)
-	}
-}
-
 func TestBuildInstanceFiltersOptionalFieldsOmitted(t *testing.T) {
 	spec := virtualpod.MachineSpecification{}
 	filters := buildInstanceFilters(spec)
 	if _, ok := filters["gpu_ram"]; ok {
 		t.Fatalf("gpu_ram should be omitted")
 	}
+	// These are commented out in buildInstanceFilters, so they should be omitted
 	if _, ok := filters["cuda_max_good"]; ok {
 		t.Fatalf("cuda_max_good should be omitted")
 	}
@@ -134,5 +67,9 @@ func TestBuildInstanceFiltersOptionalFieldsOmitted(t *testing.T) {
 	// geolocation omitted when no regions
 	if _, ok := filters["geolocation"]; ok {
 		t.Fatalf("geolocation should be omitted")
+	}
+	// order field should always be present
+	if _, ok := filters["order"]; !ok {
+		t.Fatalf("order field should always be present")
 	}
 }

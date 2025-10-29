@@ -113,7 +113,7 @@ func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.Machin
 	var offers []virtualpod.Offer
 
 	filters := buildInstanceFilters(spec)
-	// _, bundleOffer, err := cloudprovider.MakeRequest[BundleOffers](ctx, c.retryClient, http.MethodPut, url, filters, c.authHeader)
+	// _, bundleOffer, err := utils.MakeRequest[BundleOffers](ctx, c.retryClient, http.MethodPut, url, filters, c.authHeader)
 	_, bundleOffer, err := utils.MakeRequest[BundleOffers](ctx, c.retryClient, http.MethodPost, url, filters, c.authHeader)
 	if err != nil {
 		return offers, err
@@ -121,10 +121,17 @@ func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.Machin
 	candidates := bundleOffer.Offers
 	candidatesSorted := sortCandidates(candidates)
 
-	for candidate := range candidatesSorted {
+	logger := log.G(ctx)
+	logger.Infof("Found %d candidates for given pod (not considering price)", len(candidates))
+
+	for _, candidate := range candidatesSorted {
+		if candidate.DphTotal > spec.MaxPricePerHour {
+			continue
+		}
+
 		offers = append(offers, virtualpod.Offer{
-			OfferID:   strconv.Itoa(candidates[candidate].ID),
-			MachineID: strconv.Itoa(candidates[candidate].MachineID),
+			OfferID:   strconv.Itoa(candidate.ID),
+			MachineID: strconv.Itoa(candidate.MachineID),
 		})
 	}
 

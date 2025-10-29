@@ -70,56 +70,57 @@ type BundleOffers struct {
 }
 
 // buildInstanceFilters TODO: Allow for better filtering
-func buildInstanceFilters(s virtualpod.MachineSpecification) map[string]map[string]interface{} {
+func buildInstanceFilters(s virtualpod.MachineSpecification) map[string]interface{} {
 	type FilterOp = map[string]interface{}
-	type Filters = map[string]FilterOp
 
-	filters := Filters{
+	filters := map[string]interface{}{
 		"rentable":  FilterOp{"eq": true},
 		"rented":    FilterOp{"eq": false},
-		"external":  FilterOp{"eq": false},
 		"verified":  FilterOp{"eq": true},
 		"inet_down": FilterOp{"gt": 600},
 		"num_gpus":  FilterOp{"eq": 1},
-		// "datacenter": FilterOp{"eq": true},
+		"order":     [][]string{{"dph_total", "asc"}},
 	}
+
+	// "external": FilterOp{"eq": false},
+	// "datacenter": FilterOp{"eq": true},
 
 	allowedCountries := getAllowedCountries(s.Regions)
 	if len(allowedCountries) > 0 {
-		filters["geolocation"] = FilterOp{"in": allowedCountries}
+		filters["geolocation"] = map[string]interface{}{"in": allowedCountries}
 	}
 
 	if s.MemoryPerGPUMB > 0 {
-		filters["gpu_ram"] = FilterOp{"gte": s.MemoryPerGPUMB}
+		filters["gpu_ram"] = map[string]interface{}{"gte": s.MemoryPerGPUMB}
 	}
 
 	if s.TFLOPSMin > 0 {
-		filters["total_flops"] = FilterOp{"gte": s.TFLOPSMin}
+		filters["total_flops"] = map[string]interface{}{"gte": s.TFLOPSMin}
 	}
 
 	if s.DLPerfMin > 0 {
-		filters["dlperf"] = FilterOp{"gte": s.DLPerfMin}
+		filters["dlperf"] = map[string]interface{}{"gte": s.DLPerfMin}
 	}
 
 	if s.CudaAvailable > 0 {
 		filters["cuda_max_good"] = FilterOp{"gte": s.CudaAvailable}
 	}
 
-	if s.CPUCores > 0 {
-		filters["cpu_cores"] = FilterOp{"gte": s.CPUCores}
-	}
-
-	if s.CPURamMB > 0 {
-		filters["cpu_ram"] = FilterOp{"gte": s.CPURamMB}
-	}
-
-	if s.DiskSpace > 0 {
-		filters["disk_space"] = FilterOp{"gte": s.DiskSpace}
-	}
-
-	if s.MaxPricePerHour > 0 {
-		filters["dph_total"] = FilterOp{"lte": s.MaxPricePerHour}
-	}
+	//if s.CPUCores > 0 {
+	//	filters["cpu_cores"] = FilterOp{"gte": s.CPUCores}
+	//}
+	//
+	//if s.CPURamMB > 0 {
+	//	filters["cpu_ram"] = FilterOp{"gte": s.CPURamMB}
+	//}
+	//
+	//if s.DiskSpace > 0 {
+	//	filters["disk_space"] = FilterOp{"gte": s.DiskSpace}
+	//}
+	//
+	//if s.MaxPricePerHour > 0 {
+	//	filters["dph_total"] = FilterOp{"lte": s.MaxPricePerHour}
+	//}
 
 	return filters
 }
