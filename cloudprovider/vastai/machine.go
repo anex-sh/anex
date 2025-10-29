@@ -43,6 +43,8 @@ func GenericMachineAdapter(vastAIMachine *Machine) *virtualpod.Machine {
 	return machine
 }
 
+// } else if (vastAIMachine.ActualStatus == "created" || vastAIMachine.ActualStatus == "loading") && strings.HasPrefix(vastAIMachine.StatusMessage, "Error") {
+
 type BundleOffer struct {
 	ID          int     `json:"id"`
 	DphTotal    float64 `json:"dph_total"`

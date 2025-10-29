@@ -33,14 +33,13 @@ func (p *Provider) loadMachineBansFromFile() error {
 	if err := json.Unmarshal(data, &bans); err != nil {
 		return err
 	}
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
 	for k, v := range bans {
 		p.machineBans[k] = v
 	}
 	return nil
 }
 
+// persistMachineBansToFile TODO: Make thread safe
 func (p *Provider) persistMachineBansToFile() error {
 	if !p.bansPersistenceEnabled() {
 		return nil
@@ -49,12 +48,10 @@ func (p *Provider) persistMachineBansToFile() error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	p.mutex.RLock()
 	bansCopy := make(map[string]time.Time, len(p.machineBans))
 	for k, v := range p.machineBans {
 		bansCopy[k] = v
 	}
-	p.mutex.RUnlock()
 	data, err := json.MarshalIndent(bansCopy, "", "  ")
 	if err != nil {
 		return err

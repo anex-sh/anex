@@ -300,9 +300,10 @@ func (p *Provider) waitForMachineReady(ctx context.Context, vp *virtualpod.Virtu
 			return err
 		}
 
+		vp.SetMachine(machine)
+
 		switch machine.State {
 		case virtualpod.MachineStateRunning:
-			vp.SetMachine(machine)
 			return nil
 		case virtualpod.MachineStateFailed:
 			return backoff.Permanent(ErrMachineFailed)
