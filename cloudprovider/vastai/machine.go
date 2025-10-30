@@ -57,9 +57,9 @@ type BundleOffer struct {
 	CudaMaxGood float64 `json:"cuda_max_good"`
 	MachineID   int     `json:"machine_id"`
 
-	CPUName  string `json:"cpu_name"`
-	CPUCores int    `json:"cpu_cores"`
-	CPURam   int    `json:"cpu_ram"`
+	CPUName  string  `json:"cpu_name"`
+	CPUCores float64 `json:"cpu_cores_effective"`
+	CPURam   int     `json:"cpu_ram"`
 
 	DiskSpace    float64 `json:"disk_space"`
 	Verification string  `json:"verification"`
@@ -80,7 +80,7 @@ func buildInstanceFilters(s virtualpod.MachineSpecification) map[string]interfac
 		"inet_down": FilterOp{"gt": 600},
 		"num_gpus":  FilterOp{"eq": 1},
 		"order":     [][]string{{"dph_total", "asc"}},
-		// "gpu_name":  map[string]interface{}{"in": []string{"RTX 4090"}},
+		"gpu_name":  map[string]interface{}{"in": []string{"RTX 4090"}},
 	}
 
 	// "external": FilterOp{"eq": false},
@@ -109,10 +109,10 @@ func buildInstanceFilters(s virtualpod.MachineSpecification) map[string]interfac
 		filters["cuda_max_good"] = FilterOp{"gte": "12.6"}
 	}
 
-	//if s.CPUCores > 0 {
-	//	filters["cpu_cores"] = FilterOp{"gte": s.CPUCores}
-	//}
-	//
+	if s.CPUCores > 0 {
+		filters["cpu_cores_effective"] = FilterOp{"gte": s.CPUCores}
+	}
+
 	//if s.CPURamMB > 0 {
 	//	filters["cpu_ram"] = FilterOp{"gte": s.CPURamMB}
 	//}

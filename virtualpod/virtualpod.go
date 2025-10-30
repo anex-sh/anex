@@ -23,6 +23,7 @@ type FileMapping struct {
 
 type VirtualPod struct {
 	mutex                   sync.RWMutex
+	SyncUpdateDelete        sync.Mutex
 	name                    string
 	id                      string
 	pod                     *v1.Pod
@@ -351,10 +352,11 @@ func (vp *VirtualPod) CrashLoopBackOffDone() {
 	vp.pod.Status.ContainerStatuses[0].State.Waiting.Reason = "ContainerCreating"
 }
 
-func (vp *VirtualPod) FailPod(err error) {
+func (vp *VirtualPod) FailContainer(err error) {
 	vp.mutex.Lock()
 	defer vp.mutex.Unlock()
 
+	// TODO: Message not written
 	failContainerState := v1.ContainerState{
 		Terminated: &v1.ContainerStateTerminated{
 			ExitCode:   1,
@@ -366,4 +368,24 @@ func (vp *VirtualPod) FailPod(err error) {
 	}
 
 	vp.handleContainerTermination(failContainerState)
+}
+
+// TerminateContainer TODO: Make right with SIGTERM
+func (vp *VirtualPod) TerminateContainer(exitCode int32) {
+	vp.mutex.Lock()
+	defer vp.mutex.Unlock()
+
+	deleteContainerState := v1.ContainerState{
+		Terminated: &v1.ContainerStateTerminated{
+			ExitCode:   exitCode,
+			Reason:     "Pod Deleted",
+			FinishedAt: metav1.Now(),
+		},
+	}
+
+	if vp.pod.Status.ContainerStatuses[0].State.Running != nil {
+		deleteContainerState.Terminated.StartedAt = vp.pod.Status.ContainerStatuses[0].State.Running.StartedAt
+	}
+
+	vp.handleContainerTermination(deleteContainerState)
 }

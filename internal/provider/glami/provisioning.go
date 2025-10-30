@@ -26,13 +26,6 @@ var (
 func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 	var out virtualpod.MachineSpecification
 
-	if val, ok := pod.Spec.Containers[0].Resources.Requests["cpu"]; ok {
-		out.CPUCores = int(val.Value())
-	}
-	if val, ok := pod.Spec.Containers[0].Resources.Requests["memory"]; ok {
-		out.CPURamMB = int(val.ScaledValue(resource.Mega))
-	}
-
 	annotations := pod.GetAnnotations()
 	for key, value := range annotations {
 		if strings.HasPrefix(key, "glami.cz/") {
@@ -72,6 +65,10 @@ func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 			case "cuda-max":
 				if cuda, err := strconv.ParseFloat(value, 64); err == nil {
 					out.CudaMax = cuda
+				}
+			case "cpu-cores-min":
+				if cpuCores, err := strconv.ParseInt(value, 10, 64); err == nil {
+					out.CPUCores = int(cpuCores)
 				}
 			case "disk-space-gb":
 				if diskSpace, err := strconv.ParseInt(value, 10, 64); err == nil {
@@ -131,7 +128,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 		} else {
 			machineID, err = p.selectAndProvisionMachine(ctx, vp.Pod(), vp.AuthToken())
 			if err != nil {
-				vp.FailPod(err)
+				vp.FailContainer(err)
 				p.notifyPodUpdate(vp.Pod())
 				return err
 			}

@@ -298,7 +298,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 	ctx = addAttributes(ctx, span, namespaceKey, pod.Namespace, nameKey, pod.Name)
 
 	log.G(ctx).Infof("receive DeletePod %q", pod.Name)
-	
+
 	key := buildKey(pod)
 
 	vp, exists := p.virtualPods[key]
@@ -306,29 +306,45 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 		return errdefs.NotFound("pod not found")
 	}
 
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+	// TODO: Refactor this!
+	vp.SyncUpdateDelete.Lock()
+	defer vp.SyncUpdateDelete.Unlock()
 
 	// TODO: Change to sending SIGTERM, setting status Terminated, notify update
+	//		 Complete refactoring needed!
 	if vp.ProvisioningCompleted() {
 		if !vp.Finalized() {
-			p.metrics.podsRunning.Dec()
 			vp.LifecycleCancel()
+			vp.TerminateContainer(0)
 			p.clientProxySettings[vp.ProxySlot()].Assigned = false
+
 			err = p.client.DestroyMachine(p.baseContext, vp.MachineRentID())
 			if err != nil {
 				log.G(ctx).Infof("Error destroying instance: %v", err)
 				return err
 			}
+			vp.Finalize()
+
+			p.metrics.podsRunning.Dec()
+			p.metrics.podsByPhase.WithLabelValues("Deleted").Inc()
 		}
+		p.mutex.Lock()
 		delete(p.virtualPods, key)
+		p.mutex.Unlock()
 	} else {
 		vp.ProvisionCancel()
+		p.mutex.Lock()
 		p.clientProxySettings[vp.ProxySlot()].Assigned = false
 		delete(p.virtualPods, key)
+		p.mutex.Unlock()
+		vp.TerminateContainer(0)
+		// TODO: What about pod's phase??
 	}
 
-	// TODO: Missing any pod update!
+	// Avoid Metadata overwrite
+	pod.Status = *vp.PodStatus().DeepCopy()
+
+	// TODO: This should return AFTER DeletePod returns and processes (After grace anyway)
 	p.notifyPodUpdate(pod)
 
 	return nil
@@ -422,6 +438,13 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 	client.HTTPClient.Timeout = 10 * time.Second
 
 	reconcile := func() {
+		// TODO: Refactor this!
+		vp.SyncUpdateDelete.Lock()
+		defer vp.SyncUpdateDelete.Unlock()
+		if ctx.Err() != nil {
+			return
+		}
+
 		update, err := vp.PodStatusUpdate(ctx, client)
 		if err != nil {
 			log.G(ctx).Errorf("Error getting pod status: %v", err)
@@ -451,9 +474,7 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 			}
 
 			restartCtx, restartCancel := context.WithCancel(p.baseContext)
-			p.mutex.Lock()
 			vp.ProvisionCancel = restartCancel
-			p.mutex.Unlock()
 
 			vp.LifecycleCancel()
 			p.provisioningWG.Add(1)
@@ -469,8 +490,8 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 			key := buildKey(vp.Pod())
 			p.virtualPods[key].LifecycleCancel()
 			p.clientProxySettings[vp.ProxySlot()].Assigned = false
-			vp.Finalize()
 			p.mutex.Unlock()
+			vp.Finalize()
 
 			machineID := vp.MachineRentID()
 			// TODO: Implement retry
@@ -479,7 +500,7 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 	}
 
 	// Likely already running at this point
-	// reconcile()
+	reconcile()
 
 	for {
 		select {

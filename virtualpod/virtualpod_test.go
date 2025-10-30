@@ -182,7 +182,7 @@ func TestHandleContainerRestartIncrementsCountAndBackoffFlag(t *testing.T) {
 func TestFailPodSetsTerminationWithReasonAndExitCode(t *testing.T) {
 	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &ProxyConfig{}, 0, nil, nil, "")
 	err := errors.New("boom")
-	vp.FailPod(err)
+	vp.FailContainer(err)
 	cs := vp.pod.Status.ContainerStatuses[0]
 	if cs.State.Terminated == nil {
 		t.Fatalf("expected terminated state")
