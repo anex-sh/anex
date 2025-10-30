@@ -148,6 +148,21 @@ func (p *Provider) ConfigureNode(ctx context.Context, n *v1.Node) {
 		}
 	}(p.baseContext)
 
+	// Start the garbage collection
+	go func(ctx context.Context) {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				p.machineGarbageCollector(ctx)
+			}
+		}
+	}(p.baseContext)
+
 	p.metrics.nodeStatus.WithLabelValues("Ready").Set(1)
 	p.metrics.nodeStatus.WithLabelValues("NotReady").Set(0)
 

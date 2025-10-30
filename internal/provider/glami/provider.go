@@ -150,6 +150,29 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 	return &provider, nil
 }
 
+func (p *Provider) machineGarbageCollector(ctx context.Context) {
+	logger := log.G(ctx)
+
+	// List pods for virtual node as registered by apiserver
+	pods, err := listPodsForNode(ctx, p.k8s, p.nodeName)
+	if err != nil {
+		logger.Errorf("failed to list pods for node %s: %v", p.nodeName, err)
+		return
+	}
+
+	// Delete any dangling machines with non-matching pod UID
+	var podUIDS []string
+	for _, pod := range pods.Items {
+		podUIDS = append(podUIDS, string(pod.UID))
+	}
+
+	// TODO: Map running machines to pods
+	err = p.client.PruneDanglingMachines(ctx, podUIDS)
+	if err != nil {
+		log.G(ctx).Errorf("failed to prune dangling machines: %v", err)
+	}
+}
+
 func buildKeyFromNames(namespace, name string) string {
 	return fmt.Sprintf("%s-%s", namespace, name)
 }
@@ -316,13 +339,14 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 		if !vp.Finalized() {
 			vp.LifecycleCancel()
 			vp.TerminateContainer(0)
-			p.clientProxySettings[vp.ProxySlot()].Assigned = false
 
 			err = p.client.DestroyMachine(p.baseContext, vp.MachineRentID())
 			if err != nil {
 				log.G(ctx).Infof("Error destroying instance: %v", err)
 				return err
 			}
+
+			p.clientProxySettings[vp.ProxySlot()].Assigned = false
 			vp.Finalize()
 
 			p.metrics.podsRunning.Dec()
