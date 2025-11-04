@@ -13,14 +13,21 @@ type PortInfo struct {
 }
 
 type Machine struct {
-	ID            int                   `json:"id"`
-	MachineID     int                   `json:"machine_id"`
-	PublicIP      string                `json:"public_ipaddr"`
-	ActualStatus  string                `json:"actual_status"`
-	StatusMessage string                `json:"status_msg"`
-	Label         string                `json:"label"`
-	Ports         map[string][]PortInfo `json:"ports"`
-	State         virtualpod.MachineState
+	ID                 int                   `json:"id"`
+	MachineID          int                   `json:"machine_id"`
+	PublicIP           string                `json:"public_ipaddr"`
+	ActualStatus       string                `json:"actual_status"`
+	StatusMessage      string                `json:"status_msg"`
+	Label              string                `json:"label"`
+	Ports              map[string][]PortInfo `json:"ports"`
+	GpuName            string                `json:"gpu_name"`
+	GpuVRAM            float64               `json:"gpu_totalram"`
+	GpuTFLOPS          float64               `json:"total_flops"`
+	GpuMemoryBandwidth float64               `json:"gpu_mem_bw"`
+	CpuCores           float64               `json:"cpu_cores_effective"`
+	CpuRam             float64               `json:"cpu_ram"`
+	PricePerHr         float64               `json:"dph_total"`
+	State              virtualpod.MachineState
 }
 
 func GenericMachineAdapter(vastAIMachine *Machine) *virtualpod.Machine {
@@ -28,6 +35,14 @@ func GenericMachineAdapter(vastAIMachine *Machine) *virtualpod.Machine {
 	machine.ID = strconv.Itoa(vastAIMachine.ID)
 	machine.MachineID = strconv.Itoa(vastAIMachine.MachineID)
 	machine.PublicIP = vastAIMachine.PublicIP
+
+	machine.States.GpuName = vastAIMachine.GpuName
+	machine.States.GpuVRAM = vastAIMachine.GpuVRAM
+	machine.States.GpuTFLOPS = vastAIMachine.GpuTFLOPS
+	machine.States.GpuMemoryBandwidth = vastAIMachine.GpuMemoryBandwidth
+	machine.States.CpuCores = vastAIMachine.CpuCores
+	machine.States.CpuRam = vastAIMachine.CpuRam
+	machine.States.PricePerHr = vastAIMachine.PricePerHr
 
 	if vastAIMachine.ActualStatus == "running" {
 		machine.State = virtualpod.MachineStateRunning
@@ -113,17 +128,9 @@ func buildInstanceFilters(s virtualpod.MachineSpecification) map[string]interfac
 		filters["cpu_cores_effective"] = FilterOp{"gte": s.CPUCores}
 	}
 
-	//if s.CPURamMB > 0 {
-	//	filters["cpu_ram"] = FilterOp{"gte": s.CPURamMB}
-	//}
-	//
-	//if s.DiskSpace > 0 {
-	//	filters["disk_space"] = FilterOp{"gte": s.DiskSpace}
-	//}
-	//
-	//if s.MaxPricePerHour > 0 {
-	//	filters["dph_total"] = FilterOp{"lte": s.MaxPricePerHour}
-	//}
+	if s.CPURamMB > 0 {
+		filters["cpu_ram"] = map[string]interface{}{"gte": s.CPURamMB}
+	}
 
 	return filters
 }

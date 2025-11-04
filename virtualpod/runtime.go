@@ -78,6 +78,17 @@ func (vp *VirtualPod) PushEnvVars(ctx context.Context, httpClient *retryablehttp
 		data += fmt.Sprintf("%s=%s\n", env.Name, env.Value)
 	}
 
+	// TODO: Inject Machine details
+	data += fmt.Sprintf("CLOUD_PROVIDER=vastai\n")
+	data += fmt.Sprintf("MACHINE_ID=\"%s\"\n", vp.machine.MachineID)
+	data += fmt.Sprintf("GPU_NAME=\"%s\"\n", vp.machine.States.GpuName)
+	data += fmt.Sprintf("GPU_VRAM=\"%f\"\n", vp.machine.States.GpuVRAM)
+	data += fmt.Sprintf("GPU_TFLOPS=\"%f\"\n", vp.machine.States.GpuTFLOPS)
+	data += fmt.Sprintf("GPU_MEMORY_BANDWIDTH=\"%f\"\n", vp.machine.States.GpuMemoryBandwidth)
+	data += fmt.Sprintf("CPU_CORES=\"%f\"\n", vp.machine.States.CpuCores)
+	data += fmt.Sprintf("RAM=\"%f\"\n", vp.machine.States.CpuRam)
+	data += fmt.Sprintf("PRICE_PER_HR=\"%f\"\n", vp.machine.States.PricePerHr)
+
 	return vp.pushFile(ctx, httpClient, target, data)
 }
 

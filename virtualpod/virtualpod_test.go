@@ -1,6 +1,7 @@
 package virtualpod
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -54,7 +55,7 @@ func TestReadContainerState(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := readContainerState(&tc.cs)
+			got := readContainerState(context.Background(), &tc.cs)
 			if got != tc.exp {
 				t.Fatalf("expected %s, got %s", tc.exp, got)
 			}

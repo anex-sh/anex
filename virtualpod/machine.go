@@ -41,11 +41,22 @@ type Offer struct {
 	MachineID string
 }
 
+type States struct {
+	GpuName            string
+	GpuVRAM            float64
+	GpuTFLOPS          float64
+	GpuMemoryBandwidth float64
+	CpuCores           float64
+	CpuRam             float64
+	PricePerHr         float64
+}
+
 type Machine struct {
 	ID        string
 	MachineID string
 	PublicIP  string
 	AgentPort int
+	States    States
 	State     MachineState
 }
 

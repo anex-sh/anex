@@ -49,15 +49,6 @@ func TestBuildInstanceFiltersOptionalFieldsOmitted(t *testing.T) {
 		t.Fatalf("gpu_ram should be omitted")
 	}
 	// These are commented out in buildInstanceFilters, so they should be omitted
-	if _, ok := filters["cuda_max_good"]; ok {
-		t.Fatalf("cuda_max_good should be omitted")
-	}
-	if _, ok := filters["cpu_cores"]; ok {
-		t.Fatalf("cpu_cores should be omitted")
-	}
-	if _, ok := filters["cpu_ram"]; ok {
-		t.Fatalf("cpu_ram should be omitted")
-	}
 	if _, ok := filters["disk_space"]; ok {
 		t.Fatalf("disk_space should be omitted")
 	}
