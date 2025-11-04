@@ -174,9 +174,10 @@ func (p *Provider) ConfigureNode(ctx context.Context, n *v1.Node) {
 // Capacity returns a resource list containing the capacity limits.
 func (p *Provider) capacity() v1.ResourceList {
 	rl := v1.ResourceList{
-		"cpu":    resource.MustParse(p.config.VirtualNode.CPU),
-		"memory": resource.MustParse(p.config.VirtualNode.Memory),
-		"pods":   resource.MustParse(p.config.VirtualNode.PodLimit),
+		"cpu":            resource.MustParse(p.config.VirtualNode.CPU),
+		"memory":         resource.MustParse(p.config.VirtualNode.Memory),
+		"pods":           resource.MustParse(p.config.VirtualNode.PodLimit),
+		"nvidia.com/gpu": resource.MustParse("100"),
 	}
 	return rl
 }

@@ -70,6 +70,10 @@ func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 				if cpuCores, err := strconv.ParseInt(value, 10, 64); err == nil {
 					out.CPUCores = int(cpuCores)
 				}
+			case "cpu-ram-min":
+				if cpuRam, err := strconv.ParseInt(value, 10, 64); err == nil {
+					out.CPURamMB = int(cpuRam) * 1024
+				}
 			case "disk-space-gb":
 				if diskSpace, err := strconv.ParseInt(value, 10, 64); err == nil {
 					out.DiskSpace = int(diskSpace)

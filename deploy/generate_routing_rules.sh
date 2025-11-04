@@ -92,7 +92,7 @@ reset_rules() {
   drop_chain_if_exists filter "$FWD_CHAIN"
 }
 
-usage() {
+usage() { 
   cat <<EOF
 Usage: $0 apply --pod-limit NUM | reset
 
