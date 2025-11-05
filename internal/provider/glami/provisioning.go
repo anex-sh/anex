@@ -11,7 +11,6 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/utils"
 	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -131,9 +130,10 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			err = p.restartPod(ctx, machineID, vp.ImagePullAlways())
 		} else {
 			machineID, err = p.selectAndProvisionMachine(ctx, vp.Pod(), vp.AuthToken())
+			// TODO: This is wrong, pod is not failed if provisioning still in progress
 			if err != nil {
-				vp.FailContainer(err)
-				p.notifyPodUpdate(vp.Pod())
+				// vp.FailContainer(err)
+				//p.notifyPodUpdate(vp.Pod())
 				return err
 			}
 
@@ -247,7 +247,12 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, a
 	logger.Infof("Initializing instance for pod")
 
 	bo := backoff.NewConstantBackOff(60 * time.Second)
+
 	op := func() error {
+		p.mutex.Lock()
+		defer p.mutex.Unlock()
+		time.Sleep(1 * time.Second)
+
 		machineSpec := newMachineSpecification(pod)
 		var offers []virtualpod.Offer
 		offers, err = p.client.GetRentalCandidates(ctx, machineSpec)
@@ -264,19 +269,18 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, a
 		// Filter out banned machines
 		var candidatesFiltered []string
 		banDuration := time.Duration(p.config.GetMachineBanDuration()) * time.Second
-		p.mutex.RLock()
 		for _, offer := range offers {
 			if banTime, banned := p.machineBans[offer.MachineID]; !banned || (banDuration > 0 && time.Since(banTime) > banDuration) {
 				candidatesFiltered = append(candidatesFiltered, offer.OfferID)
 			}
 		}
-		p.mutex.RUnlock()
 
 		machineID, err = p.client.ProvisionMachine(ctx, candidatesFiltered, pod, authToken, p.config.Proxy.Enable, p.config.Promtail.Enable)
-		if errors.Is(err, utils.ErrBadPayload) || errors.Is(err, utils.ErrUnauthorized) {
-			p.metrics.podsProvisioningTotal.WithLabelValues("false", "provisioning_call_failed").Inc()
-			return backoff.Permanent(err)
-		}
+		// TODO: Make some smoke tests on init; retry Unauthorized during runtime
+		//if errors.Is(err, utils.ErrBadPayload) || errors.Is(err, utils.ErrUnauthorized) {
+		//	p.metrics.podsProvisioningTotal.WithLabelValues("false", "provisioning_call_failed").Inc()
+		//	return backoff.Permanent(err)
+		//}
 
 		return err
 	}

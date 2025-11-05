@@ -129,15 +129,6 @@ type ProviderConfig struct {
 	AgentAuthToken string               `yaml:"agentAuthToken,omitempty"`
 }
 
-// Legacy fields for compatibility
-type ProvisioningConfig struct {
-	RetryLimit         uint64 `yaml:"retryLimit,omitempty"`
-	StartupTimeout     uint64 `yaml:"startupTimeout,omitempty"`
-	MachineBanDuration uint64 `yaml:"machineBanDuration,omitempty"`
-	PersistBansToFile  bool   `yaml:"persistBansToLocalFile,omitempty"`
-	BansFilePath       string `yaml:"bansFilePath,omitempty"`
-}
-
 // camelToSnake converts camelCase to snake_case
 func camelToSnake(s string) string {
 	var result strings.Builder

@@ -226,7 +226,8 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 		statusCode, response, err := utils.MakeRequest[provisionInstanceResponse](ctx, c.retryClient, http.MethodPut, url, payload, c.authHeader)
 		if statusCode == 400 {
 			logger.Warnf("Request to provision instance %d failed with status code 400; bad payload", id)
-			return "", utils.ErrBadPayload
+			// return "", utils.ErrBadPayload
+			continue
 		}
 		if statusCode == 401 {
 			logger.Warnf("Request to provision instance %d failed with status code 401; unauthorized", id)
