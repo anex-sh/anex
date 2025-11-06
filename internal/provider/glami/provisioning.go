@@ -239,6 +239,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 	}
 
 	dur := time.Since(start).Seconds()
+	logger.Infof("Initializing instance %s for pod %s in %d seconds", vp.MachineStableID(), vp.ID(), int(dur))
 	p.metrics.podsProvisioningDurationSecs.Add(dur)
 }
 
@@ -296,7 +297,7 @@ func (p *Provider) waitForMachineReady(ctx context.Context, vp *virtualpod.Virtu
 	retryCtx, cancel := context.WithTimeout(ctx, p.config.GetStartupTimeout())
 	defer cancel()
 
-	var bo backoff.BackOff = backoff.NewConstantBackOff(30 * time.Second)
+	var bo backoff.BackOff = backoff.NewConstantBackOff(90 * time.Second)
 	bo = backoff.WithContext(bo, retryCtx)
 
 	op := func() error {

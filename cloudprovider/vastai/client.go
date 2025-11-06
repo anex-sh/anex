@@ -230,15 +230,15 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 			continue
 		}
 		if statusCode == 401 {
-			logger.Warnf("Request to provision instance %d failed with status code 401; unauthorized", id)
+			logger.Warnf("Request to provision instance %s failed with status code 401; unauthorized", id)
 			return "", utils.ErrUnauthorized
 		}
 		if err != nil {
-			logger.Warnf("Request to provision instance %d failed: %v", id, err)
+			logger.Warnf("Request to provision instance %s failed: %v", id, err)
 			continue
 		}
 		if !response.Success {
-			logger.Warnf("Failed to provision instance %d: API returned non-success status", id)
+			logger.Warnf("Failed to provision instance %s: API returned non-success status", id)
 			continue
 		}
 
@@ -301,6 +301,10 @@ func (c *Client) PruneDanglingMachines(ctx context.Context, podUIDs []string) er
 	for _, machine := range machines {
 		label := parseMachineLabel(machine.Label)
 		if label == nil {
+			continue
+		}
+
+		if label.ClusterUID != c.clusterUID {
 			continue
 		}
 

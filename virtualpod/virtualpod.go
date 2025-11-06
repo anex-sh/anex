@@ -76,6 +76,8 @@ func (vp *VirtualPod) SetMachine(machine *Machine) {
 	vp.mutex.RLock()
 	defer vp.mutex.RUnlock()
 	vp.machine = machine
+	vp.pod.ObjectMeta.Annotations["glami.cz/vastai-machine-rent-id"] = machine.ID
+	vp.pod.ObjectMeta.Annotations["glami.cz/vastai-machine-stable-id"] = machine.MachineID
 }
 
 func (vp *VirtualPod) RemoveMachine() {
