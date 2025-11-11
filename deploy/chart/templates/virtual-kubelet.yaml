@@ -22,6 +22,8 @@ spec:
           args:
             - --provider-config=/virtual-kubelet-config.yaml
           env:
+            - name: VIRTUAL_NODE_PODS
+              value: "100"
             {{- if .Values.proxy.enable }}
             - name: PROXY_CONFIG_PATH
               value: "/proxy-config.yaml"

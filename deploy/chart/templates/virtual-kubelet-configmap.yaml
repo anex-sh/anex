@@ -31,7 +31,7 @@ data:
             {{- end }}
     virtualNode:
       nodeName: {{ .Values.virtualNode.nodeName | quote }}
-      pods: {{ .Values.virtualNode.pods | quote }}
+      pods: {{ .Values.virtualNode.podLimit | quote }}
       cpu: {{ .Values.virtualNode.cpu | quote }}
       memory: {{ .Values.virtualNode.memory | quote }}
       {{- if .Values.virtualNode.labels }}
