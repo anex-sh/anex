@@ -10,8 +10,8 @@ spec:
         karpenter.sh/discovery: "eks-clusters"
   securityGroupSelectorTerms:
     - tags:
-        karpenter.sh/discovery: "eks-clusters"
-  role: "KarpenterNodeRole-service-cluster-prod--eks-cluster"
+        karpenter.sh/discovery: "eks-cluster-rex-dev"
+  role: "KarpenterNodeRole-rex-dev--eks-cluster"
   tags:
     ManagedBy: Skarupa
   detailedMonitoring: false
