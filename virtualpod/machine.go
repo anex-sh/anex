@@ -24,16 +24,52 @@ const (
 )
 
 type MachineSpecification struct {
-	GPUCount        int
-	MemoryPerGPUMB  int
-	TFLOPSMin       float64
-	DLPerfMin       float64
-	CudaMax         float64
-	CPUCores        int
-	CPURamMB        int
-	DiskSpace       int
-	MaxPricePerHour float64
-	Regions         []Region
+	// Bool fields
+	VerifiedOnly   bool
+	DatacenterOnly bool
+
+	// List fields
+	GPUNames   []string
+	ComputeCap []string
+	Regions    []Region
+
+	// Min/Max/Exact fields
+	GPUCount         *int
+	GPUCountMin      *int
+	GPUCountMax      *int
+	VRAM             *int // MB
+	VRAMMin          *int
+	VRAMMax          *int
+	VRAMTotal        *int // MB
+	VRAMTotalMin     *int
+	VRAMTotalMax     *int
+	VRAMBandwidth    *float64 // GB/s
+	VRAMBandwidthMin *float64
+	VRAMBandwidthMax *float64
+	TFLOPS           *float64
+	TFLOPSMin        *float64
+	TFLOPSMax        *float64
+	CUDA             *float64
+	CUDAMin          *float64
+	CUDAMax          *float64
+	CPU              *int // cores
+	CPUMin           *int
+	CPUMax           *int
+	RAM              *int // MB
+	RAMMin           *int
+	RAMMax           *int
+	Price            *float64 // per hour
+	PriceMin         *float64
+	PriceMax         *float64
+	VastAIDLPerf     *float64
+	VastAIDLPerfMin  *float64
+	VastAIDLPerfMax  *float64
+	UploadSpeed      *float64 // Mbps
+	UploadSpeedMin   *float64
+	UploadSpeedMax   *float64
+	DownloadSpeed    *float64 // Mbps
+	DownloadSpeedMin *float64
+	DownloadSpeedMax *float64
 }
 
 type Offer struct {

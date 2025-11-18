@@ -125,7 +125,10 @@ func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.Machin
 	logger.Infof("Found %d candidates for given pod (not considering price)", len(candidates))
 
 	for _, candidate := range candidatesSorted {
-		if candidate.DphTotal > spec.MaxPricePerHour {
+		// Check price constraints
+		// If exact price is specified, it's already filtered in buildInstanceFilters
+		// Here we only need to check max price if specified
+		if spec.PriceMax != nil && candidate.DphTotal > *spec.PriceMax {
 			continue
 		}
 

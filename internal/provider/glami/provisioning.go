@@ -13,7 +13,6 @@ import (
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	"k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var (
@@ -25,63 +24,190 @@ var (
 func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 	var out virtualpod.MachineSpecification
 
+	const prefix = "gpu-provider.glami.cz/"
 	annotations := pod.GetAnnotations()
+
+	// Helper functions for parsing
+	parseInt := func(value string) *int {
+		if v, err := strconv.Atoi(value); err == nil {
+			return &v
+		}
+		return nil
+	}
+
+	parseFloat := func(value string) *float64 {
+		if v, err := strconv.ParseFloat(value, 64); err == nil {
+			return &v
+		}
+		return nil
+	}
+
+	parseBool := func(value string) bool {
+		v, _ := strconv.ParseBool(value)
+		return v
+	}
+
+	parseList := func(value string) []string {
+		parts := strings.Split(value, ",")
+		var result []string
+		for _, p := range parts {
+			trimmed := strings.TrimSpace(p)
+			if trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		return result
+	}
+
+	// Track exact values to handle conflicts with min/max
+	exactFields := make(map[string]bool)
+
+	// First pass: collect exact values
+	for key := range annotations {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		setting := strings.TrimPrefix(key, prefix)
+		
+		// Check if this is an exact value (no -min or -max suffix)
+		if !strings.HasSuffix(setting, "-min") && !strings.HasSuffix(setting, "-max") {
+			exactFields[setting] = true
+		}
+	}
+
+	// Second pass: parse all annotations
 	for key, value := range annotations {
-		if strings.HasPrefix(key, "glami.cz/") {
-			setting := strings.TrimPrefix(key, "glami.cz/")
-			switch setting {
-			case "region":
-				regions := strings.Split(value, ",")
-				for _, r := range regions {
-					if r == "europe" {
-						out.Regions = append(out.Regions, virtualpod.RegionEurope)
-					} else if r == "north-america" {
-						out.Regions = append(out.Regions, virtualpod.RegionNorthAmerica)
-					} else if r == "asia-pacific" {
-						out.Regions = append(out.Regions, virtualpod.RegionAsia)
-					} else if r == "africa" {
-						out.Regions = append(out.Regions, virtualpod.RegionAfrica)
-					} else if r == "south-america" {
-						out.Regions = append(out.Regions, virtualpod.RegionSouthAmerica)
-					} else if r == "oceania" {
-						out.Regions = append(out.Regions, virtualpod.RegionOceania)
-					} else {
-						continue
-					}
-				}
-			case "min-gpu-memory":
-				if q, err := resource.ParseQuantity(value); err == nil {
-					out.MemoryPerGPUMB = int(q.Value() / (1024 * 1024)) // Convert to MB
-				}
-			case "tflops-min":
-				if tflops, err := strconv.ParseFloat(value, 64); err == nil {
-					out.TFLOPSMin = tflops
-				}
-			case "dlperf-min":
-				if dlperf, err := strconv.ParseFloat(value, 64); err == nil {
-					out.DLPerfMin = dlperf
-				}
-			case "cuda-max":
-				if cuda, err := strconv.ParseFloat(value, 64); err == nil {
-					out.CudaMax = cuda
-				}
-			case "cpu-cores-min":
-				if cpuCores, err := strconv.ParseInt(value, 10, 64); err == nil {
-					out.CPUCores = int(cpuCores)
-				}
-			case "cpu-ram-min":
-				if cpuRam, err := strconv.ParseInt(value, 10, 64); err == nil {
-					out.CPURamMB = int(cpuRam) * 1024
-				}
-			case "disk-space-gb":
-				if diskSpace, err := strconv.ParseInt(value, 10, 64); err == nil {
-					out.DiskSpace = int(diskSpace)
-				}
-			case "max-price":
-				if price, err := strconv.ParseFloat(value, 64); err == nil {
-					out.MaxPricePerHour = price
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		setting := strings.TrimPrefix(key, prefix)
+
+		switch {
+		// Bool fields
+		case setting == "verified-only":
+			out.VerifiedOnly = parseBool(value)
+		case setting == "datacenter-only":
+			out.DatacenterOnly = parseBool(value)
+
+		// List fields
+		case setting == "region":
+			regions := parseList(value)
+			for _, r := range regions {
+				switch r {
+				case "europe":
+					out.Regions = append(out.Regions, virtualpod.RegionEurope)
+				case "north-america":
+					out.Regions = append(out.Regions, virtualpod.RegionNorthAmerica)
+				case "asia-pacific":
+					out.Regions = append(out.Regions, virtualpod.RegionAsia)
+				case "africa":
+					out.Regions = append(out.Regions, virtualpod.RegionAfrica)
+				case "south-america":
+					out.Regions = append(out.Regions, virtualpod.RegionSouthAmerica)
+				case "oceania":
+					out.Regions = append(out.Regions, virtualpod.RegionOceania)
 				}
 			}
+		case setting == "gpu-names":
+			out.GPUNames = parseList(value)
+		case setting == "compute-cap":
+			out.ComputeCap = parseList(value)
+
+		// GPU Count
+		case setting == "gpu-count":
+			out.GPUCount = parseInt(value)
+		case setting == "gpu-count-min" && !exactFields["gpu-count"]:
+			out.GPUCountMin = parseInt(value)
+		case setting == "gpu-count-max" && !exactFields["gpu-count"]:
+			out.GPUCountMax = parseInt(value)
+
+		// VRAM (per GPU)
+		case setting == "vram":
+			out.VRAM = parseInt(value)
+		case setting == "vram-min" && !exactFields["vram"]:
+			out.VRAMMin = parseInt(value)
+		case setting == "vram-max" && !exactFields["vram"]:
+			out.VRAMMax = parseInt(value)
+
+		// VRAM Total
+		case setting == "vram-total":
+			out.VRAMTotal = parseInt(value)
+		case setting == "vram-total-min" && !exactFields["vram-total"]:
+			out.VRAMTotalMin = parseInt(value)
+		case setting == "vram-total-max" && !exactFields["vram-total"]:
+			out.VRAMTotalMax = parseInt(value)
+
+		// VRAM Bandwidth
+		case setting == "vram-bandwidth":
+			out.VRAMBandwidth = parseFloat(value)
+		case setting == "vram-bandwidth-min" && !exactFields["vram-bandwidth"]:
+			out.VRAMBandwidthMin = parseFloat(value)
+		case setting == "vram-bandwidth-max" && !exactFields["vram-bandwidth"]:
+			out.VRAMBandwidthMax = parseFloat(value)
+
+		// TFLOPS
+		case setting == "tflops":
+			out.TFLOPS = parseFloat(value)
+		case setting == "tflops-min" && !exactFields["tflops"]:
+			out.TFLOPSMin = parseFloat(value)
+		case setting == "tflops-max" && !exactFields["tflops"]:
+			out.TFLOPSMax = parseFloat(value)
+
+		// CUDA
+		case setting == "cuda":
+			out.CUDA = parseFloat(value)
+		case setting == "cuda-min" && !exactFields["cuda"]:
+			out.CUDAMin = parseFloat(value)
+		case setting == "cuda-max" && !exactFields["cuda"]:
+			out.CUDAMax = parseFloat(value)
+
+		// CPU
+		case setting == "cpu":
+			out.CPU = parseInt(value)
+		case setting == "cpu-min" && !exactFields["cpu"]:
+			out.CPUMin = parseInt(value)
+		case setting == "cpu-max" && !exactFields["cpu"]:
+			out.CPUMax = parseInt(value)
+
+		// RAM
+		case setting == "ram":
+			out.RAM = parseInt(value)
+		case setting == "ram-min" && !exactFields["ram"]:
+			out.RAMMin = parseInt(value)
+		case setting == "ram-max" && !exactFields["ram"]:
+			out.RAMMax = parseInt(value)
+
+		// Price
+		case setting == "price":
+			out.Price = parseFloat(value)
+		case setting == "price-min" && !exactFields["price"]:
+			out.PriceMin = parseFloat(value)
+		case setting == "price-max" && !exactFields["price"]:
+			out.PriceMax = parseFloat(value)
+
+		// VastAI DLPerf
+		case setting == "vastai-dlperf":
+			out.VastAIDLPerf = parseFloat(value)
+		case setting == "vastai-dlperf-min" && !exactFields["vastai-dlperf"]:
+			out.VastAIDLPerfMin = parseFloat(value)
+		case setting == "vastai-dlperf-max" && !exactFields["vastai-dlperf"]:
+			out.VastAIDLPerfMax = parseFloat(value)
+
+		// Upload Speed
+		case setting == "upload-speed":
+			out.UploadSpeed = parseFloat(value)
+		case setting == "upload-speed-min" && !exactFields["upload-speed"]:
+			out.UploadSpeedMin = parseFloat(value)
+		case setting == "upload-speed-max" && !exactFields["upload-speed"]:
+			out.UploadSpeedMax = parseFloat(value)
+
+		// Download Speed
+		case setting == "download-speed":
+			out.DownloadSpeed = parseFloat(value)
+		case setting == "download-speed-min" && !exactFields["download-speed"]:
+			out.DownloadSpeedMin = parseFloat(value)
+		case setting == "download-speed-max" && !exactFields["download-speed"]:
+			out.DownloadSpeedMax = parseFloat(value)
 		}
 	}
 
