@@ -327,10 +327,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 	ctx, span := trace.StartSpan(ctx, "DeletePod")
 	defer span.End()
 
-	// Add the pod's coordinates to the current span.
-	ctx = addAttributes(ctx, span, namespaceKey, pod.Namespace, nameKey, pod.Name)
-
-	logger.Info("Deleting pod")
+	logger.Info("received delete pod")
 	p.eventRecorder.Event(pod, v1.EventTypeNormal, "Deleting", "Deleting pod")
 
 	key := buildKey(pod)
@@ -349,7 +346,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 	//		 Complete refactoring needed!
 	if vp.ProvisioningCompleted() {
 		if !vp.Finalized() {
-			logger.Info("Terminating container and destroying machine")
+			logger.Infof("Terminating machine %s", vp.MachineRentID())
 			vp.LifecycleCancel()
 			vp.TerminateContainer(0)
 
@@ -473,6 +470,7 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 	client.RetryWaitMin = 200 * time.Millisecond
 	client.RetryWaitMax = 5 * time.Second
 	client.HTTPClient.Timeout = 10 * time.Second
+	client.Logger = nil
 
 	reconcile := func() {
 		// TODO: Refactor this!
@@ -484,7 +482,7 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 
 		update, err := vp.PodStatusUpdate(ctx, client)
 		if err != nil {
-			logger.Errorf("Error getting pod status: %v", err)
+			logger.Warnf("Error getting pod status: %v", err)
 			return
 		}
 
@@ -498,7 +496,7 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 		}
 
 		if update.Restarts {
-			logger.Warnf("Container is restarting")
+			logger.Infof("Container is restarting")
 			p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "ContainerRestarting", "Container is restarting")
 			p.metrics.containerRestarts.WithLabelValues(statusLabel).Inc()
 			p.metrics.podsRunning.Dec()

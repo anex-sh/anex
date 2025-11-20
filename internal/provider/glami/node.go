@@ -9,7 +9,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sirupsen/logrus"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
+	logruslogger "github.com/virtual-kubelet/virtual-kubelet/log/logrus"
 	"github.com/virtual-kubelet/virtual-kubelet/trace"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -61,7 +63,10 @@ func (p *Provider) ConfigureNode(ctx context.Context, n *v1.Node) {
 	ctx, span := trace.StartSpan(ctx, "cloud.ConfigureNode") //nolint:staticcheck,ineffassign
 	defer span.End()
 
-	p.baseContext = ctx
+	// Create a fresh context with a logger that doesn't have the method-specific field
+	// This uses the same configuration as in main.go (JSON formatter, etc.)
+	freshLogger := logruslogger.FromLogrus(logrus.NewEntry(logrus.StandardLogger()))
+	p.baseContext = log.WithLogger(context.Background(), freshLogger)
 
 	n.Status.Capacity = p.capacity()
 	n.Status.Allocatable = p.capacity()
