@@ -294,6 +294,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 		client.RetryWaitMin = 1 * time.Second
 		client.RetryWaitMax = 30 * time.Second
 		client.RetryMax = math.MaxInt32
+		client.Logger = nil
 
 		agentCtx, agentStartUpCancel := context.WithTimeout(ctx, p.config.GetStartupTimeout())
 		defer agentStartUpCancel()

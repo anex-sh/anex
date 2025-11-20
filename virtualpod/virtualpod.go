@@ -25,6 +25,7 @@ type VirtualPod struct {
 	mutex                   sync.RWMutex
 	SyncUpdateDelete        sync.Mutex
 	name                    string
+	namespace               string
 	id                      string
 	pod                     *v1.Pod
 	machine                 *Machine
@@ -45,6 +46,7 @@ type VirtualPod struct {
 func NewVirtualPod(id string, pod *v1.Pod, machine *Machine, proxyConfig *ProxyConfig, slot int, configMaps map[string]map[string]string, volumeMounts []FileMapping, authToken string) *VirtualPod {
 	return &VirtualPod{
 		name:         pod.Name,
+		namespace:    pod.Namespace,
 		id:           id,
 		pod:          pod,
 		machine:      machine,
@@ -102,6 +104,14 @@ func (vp *VirtualPod) Pod() *v1.Pod {
 	vp.mutex.RLock()
 	defer vp.mutex.RUnlock()
 	return vp.pod.DeepCopy()
+}
+
+func (vp *VirtualPod) PodName() string {
+	return vp.pod.Name
+}
+
+func (vp *VirtualPod) PodNamespace() string {
+	return vp.pod.Namespace
 }
 
 func (vp *VirtualPod) PodStatus() *v1.PodStatus {

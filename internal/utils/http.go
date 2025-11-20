@@ -19,6 +19,7 @@ func NewDefaultRetryClient() *retryablehttp.Client {
 	rc.HTTPClient.Timeout = 20 * time.Second
 	rc.RetryWaitMin = 200 * time.Millisecond
 	rc.RetryWaitMax = 2 * time.Second
+	rc.Logger = nil
 
 	// Wire logging (optional)
 	// rc.Logger = slog.NewLogLogger(logger.Handler(), slog.LevelInfo)

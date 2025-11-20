@@ -213,6 +213,7 @@ func (p *Provider) getProxyConfigForVirtualPod() (int, *virtualpod.ProxyClientCo
 
 // CreatePod accepts a pod definition and stores it in memory.
 func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
+	logger := log.G(p.baseContext)
 	p.metrics.createPodOperationsTotal.Inc()
 	p.metrics.podsByPhase.WithLabelValues("Pending").Inc()
 	ctx, span := trace.StartSpan(ctx, "CreatePod")
@@ -277,9 +278,12 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	mountPaths, _ := buildMountedConfigMaps(pod, configMaps)
 
 	key := buildKey(pod)
-	createCtx, cancel := context.WithCancel(p.baseContext)
-
 	vp := virtualpod.NewVirtualPod(key, pod, &virtualpod.Machine{}, proxyConfig, proxyIndex, configMaps, mountPaths, p.config.AgentAuthToken)
+
+	createCtx, cancel := context.WithCancel(p.baseContext)
+	annotatedLogger := logger.WithFields(log.Fields{"pod.name": pod.Name, "pod.namespace": pod.Namespace})
+	createCtx = log.WithLogger(createCtx, annotatedLogger)
+
 	vp.ProvisionCancel = cancel
 	p.virtualPods[key] = vp
 
@@ -291,14 +295,14 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 
 // UpdatePod accepts a pod definition and updates its reference.
 func (p *Provider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
+	logger := log.G(p.baseContext)
+	logger = logger.WithFields(log.Fields{"pod.name": pod.Name, "pod.namespace": pod.Namespace})
+
 	p.metrics.updatePodOperationsTotal.Inc()
 	ctx, span := trace.StartSpan(ctx, "UpdatePod")
 	defer span.End()
 
-	// Add the pod's coordinates to the current span.
-	ctx = addAttributes(ctx, span, namespaceKey, pod.Namespace, nameKey, pod.Name)
-
-	log.G(ctx).Infof("receive UpdatePod %q", pod.Name)
+	logger.Infof("receive UpdatePod", pod.Name)
 
 	key := buildKey(pod)
 	p.mutex.Lock()
@@ -312,6 +316,9 @@ func (p *Provider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 
 // DeletePod deletes the specified pod out of memory.
 func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
+	logger := log.G(p.baseContext)
+	logger = logger.WithFields(log.Fields{"pod.name": pod.Name, "pod.namespace": pod.Namespace})
+
 	p.metrics.deletePodOperationsTotal.Inc()
 	p.metrics.podsByPhase.WithLabelValues("Deleted").Inc()
 	ctx, span := trace.StartSpan(ctx, "DeletePod")
@@ -342,7 +349,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 
 			err = p.client.DestroyMachine(p.baseContext, vp.MachineRentID())
 			if err != nil {
-				log.G(ctx).Infof("Error destroying instance: %v", err)
+				logger.Infof("Error destroying instance: %v", err)
 				return err
 			}
 
@@ -376,6 +383,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 
 // GetPod returns a pod by name that is stored in memory.
 func (p *Provider) GetPod(ctx context.Context, namespace, name string) (pod *v1.Pod, err error) {
+	logger := log.G(p.baseContext)
 	p.metrics.getPodOperationsTotal.Inc()
 	ctx, span := trace.StartSpan(ctx, "GetPod")
 	defer func() {
@@ -383,10 +391,7 @@ func (p *Provider) GetPod(ctx context.Context, namespace, name string) (pod *v1.
 		span.End()
 	}()
 
-	// Add the pod's coordinates to the current span.
-	ctx = addAttributes(ctx, span, namespaceKey, namespace, nameKey, name)
-
-	// log.G(ctx).Infof("receive GetPod %q", name)
+	logger.Infof("received GetPod for %s/%s", namespace, name)
 
 	key := buildKeyFromNames(namespace, name)
 
@@ -403,9 +408,6 @@ func (p *Provider) GetPodStatus(ctx context.Context, namespace, name string) (*v
 	ctx, span := trace.StartSpan(ctx, "ContainerState")
 	defer span.End()
 
-	// Add namespace and name as attributes to the current span.
-	ctx = addAttributes(ctx, span, namespaceKey, namespace, nameKey, name)
-
 	key := buildKeyFromNames(namespace, name)
 
 	p.mutex.RLock()
@@ -421,11 +423,12 @@ func (p *Provider) GetPodStatus(ctx context.Context, namespace, name string) (*v
 
 // GetPods returns a list of all pods known to be "running".
 func (p *Provider) GetPods(ctx context.Context) ([]*v1.Pod, error) {
+	logger := log.G(p.baseContext)
 	p.metrics.getPodsOperationsTotal.Inc()
 	ctx, span := trace.StartSpan(ctx, "GetPods")
 	defer span.End()
 
-	log.G(ctx).Info("receive GetPods")
+	logger.Info("received GetPods")
 
 	var pods []*v1.Pod
 
@@ -452,6 +455,9 @@ func restartBackoff(ctx context.Context, duration time.Duration) error {
 }
 
 func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.VirtualPod) {
+	logger := log.G(p.baseContext)
+	logger = logger.WithFields(log.Fields{"pod.name": vp.PodName(), "pod.namespace": vp.PodNamespace()})
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -470,7 +476,7 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 
 		update, err := vp.PodStatusUpdate(ctx, client)
 		if err != nil {
-			log.G(ctx).Errorf("Error getting pod status: %v", err)
+			logger.Errorf("Error getting pod status: %v", err)
 			return
 		}
 
