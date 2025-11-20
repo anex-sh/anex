@@ -36,8 +36,8 @@ func TestGetEnvWithPrefix(t *testing.T) {
 	}{
 		{[]string{"cluster", "clusterUUID"}, "CLUSTER_CLUSTER_UUID"},
 		{[]string{"cloudProvider", "apiKey"}, "CLOUD_PROVIDER_API_KEY"},
-		{[]string{"virtualKubelet", "provisioning", "maxRetries"}, "VIRTUAL_KUBELET_PROVISIONING_MAX_RETRIES"},
-		{[]string{"virtualKubelet", "provisioning", "machineBansStore", "localFile", "enable"}, "VIRTUAL_KUBELET_PROVISIONING_MACHINE_BANS_STORE_LOCAL_FILE_ENABLE"},
+		{[]string{"provisioning", "maxRetries"}, "PROVISIONING_MAX_RETRIES"},
+		{[]string{"provisioning", "machineBansStore", "localFile", "enable"}, "PROVISIONING_MACHINE_BANS_STORE_LOCAL_FILE_ENABLE"},
 	}
 
 	for _, tt := range tests {
@@ -56,16 +56,16 @@ func TestOverrideWithEnv(t *testing.T) {
 	os.Setenv("CLOUD_PROVIDER_VAST_AI_API_KEY", "test-key")
 	os.Setenv("VIRTUAL_NODE_CPU", "100")
 	os.Setenv("VIRTUAL_NODE_MEMORY", "200Gi")
-	os.Setenv("VIRTUAL_KUBELET_PROVISIONING_MAX_RETRIES", "5")
-	os.Setenv("VIRTUAL_KUBELET_PROVISIONING_MACHINE_BANS_STORE_LOCAL_FILE_ENABLE", "true")
+	os.Setenv("PROVISIONING_MAX_RETRIES", "5")
+	os.Setenv("PROVISIONING_MACHINE_BANS_STORE_LOCAL_FILE_ENABLE", "true")
 
 	defer func() {
 		os.Unsetenv("CLUSTER_CLUSTER_UUID")
 		os.Unsetenv("CLOUD_PROVIDER_VAST_AI_API_KEY")
 		os.Unsetenv("VIRTUAL_NODE_CPU")
 		os.Unsetenv("VIRTUAL_NODE_MEMORY")
-		os.Unsetenv("VIRTUAL_KUBELET_PROVISIONING_MAX_RETRIES")
-		os.Unsetenv("VIRTUAL_KUBELET_PROVISIONING_MACHINE_BANS_STORE_LOCAL_FILE_ENABLE")
+		os.Unsetenv("PROVISIONING_MAX_RETRIES")
+		os.Unsetenv("PROVISIONING_MACHINE_BANS_STORE_LOCAL_FILE_ENABLE")
 	}()
 
 	config := ProviderConfig{
@@ -81,13 +81,11 @@ func TestOverrideWithEnv(t *testing.T) {
 			CPU:    "50",
 			Memory: "100Gi",
 		},
-		VirtualKubelet: VirtualKubeletConfig{
-			Provisioning: VirtualKubeletProvisioningConfig{
-				MaxRetries: 10,
-				MachineBansStore: MachineBansStoreConfig{
-					LocalFile: MachineBansStoreLocalFileConfig{
-						Enable: false,
-					},
+		Provisioning: ProvisioningConfig{
+			MaxRetries: 10,
+			MachineBansStore: MachineBansStoreConfig{
+				LocalFile: MachineBansStoreLocalFileConfig{
+					Enable: false,
 				},
 			},
 		},
@@ -107,10 +105,10 @@ func TestOverrideWithEnv(t *testing.T) {
 	if config.VirtualNode.Memory != "200Gi" {
 		t.Errorf("Expected memory to be '200Gi', got '%s'", config.VirtualNode.Memory)
 	}
-	if config.VirtualKubelet.Provisioning.MaxRetries != 5 {
-		t.Errorf("Expected max retries to be 5, got %d", config.VirtualKubelet.Provisioning.MaxRetries)
+	if config.Provisioning.MaxRetries != 5 {
+		t.Errorf("Expected max retries to be 5, got %d", config.Provisioning.MaxRetries)
 	}
-	if !config.VirtualKubelet.Provisioning.MachineBansStore.LocalFile.Enable {
+	if !config.Provisioning.MachineBansStore.LocalFile.Enable {
 		t.Error("Expected machine bans store to be enabled")
 	}
 }

@@ -12,8 +12,14 @@ spec:
       labels:
         app: "{{ include "chart.fullname" . }}-virtual-kubelet"
     spec:
-
-      affinity: {{ toYaml .Values.virtualKubelet.affinity | nindent 8 }}
+      {{- if .Values.virtualKubelet.affinity }}
+      affinity:
+        {{- toYaml .Values.virtualKubelet.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.virtualKubelet.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.virtualKubelet.nodeSelector | nindent 8 }}
+      {{- end }}
       containers:
         - name: virtual-kubelet
           image: {{ .Values.virtualKubelet.image.repository }}:{{ .Values.virtualKubelet.image.tag | default .Chart.AppVersion }}
@@ -21,12 +27,20 @@ spec:
           # command: ['sleep', '3600']
           args:
             - --provider-config=/virtual-kubelet-config.yaml
+          {{- if .Values.virtualKubelet.resources }}
+          resources:
+            {{- toYaml .Values.virtualKubelet.resources | nindent 12 }}
+          {{- end }}
           env:
             - name: VIRTUAL_NODE_PODS
               value: "100"
             {{- if .Values.proxy.enable }}
             - name: PROXY_CONFIG_PATH
               value: "/proxy-config.yaml"
+            {{- end }}
+            {{- if .Values.appConfig.proxy.enable }}
+            - name: PROXY_ENABLE
+              value: "true"
             {{- end }}
             - name: VKUBELET_POD_IP
               valueFrom:

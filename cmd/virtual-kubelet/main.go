@@ -50,6 +50,18 @@ func main() {
 		cancel()
 	}()
 
+	// Configure logrus to output JSON format matching Zap logger
+	logrus.SetFormatter(&logrus.JSONFormatter{
+		TimestampFormat: "2006-01-02T15:04:05.000Z0700", // ISO8601 format
+		FieldMap: logrus.FieldMap{
+			logrus.FieldKeyTime:  "timestamp",
+			logrus.FieldKeyLevel: "level",
+			logrus.FieldKeyMsg:   "message",
+		},
+	})
+	logrus.SetReportCaller(false)
+	logrus.SetOutput(os.Stdout)
+
 	log.L = logruslogger.FromLogrus(logrus.NewEntry(logrus.StandardLogger()))
 	trace.T = opencensus.Adapter{}
 

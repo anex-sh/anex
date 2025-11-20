@@ -246,7 +246,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 	var err error
 	var machineID string
 	var bo backoff.BackOff = backoff.NewConstantBackOff(1 * time.Second)
-	bo = backoff.WithMaxRetries(bo, uint64(p.config.VirtualKubelet.Provisioning.MaxRetries))
+	bo = backoff.WithMaxRetries(bo, uint64(p.config.Provisioning.MaxRetries))
 	bo = backoff.WithContext(bo, ctx)
 
 	op := func() error {
@@ -366,18 +366,16 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 
 	if errMainLoop := backoff.Retry(op, bo); errMainLoop == nil {
 		vp.SetProvisioningCompleted()
+		dur := time.Since(start).Seconds()
 		p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeNormal, "Started", "Container started successfully")
 		p.metrics.podsProvisioningTotal.WithLabelValues("true", "ok").Inc()
 		p.metrics.podsByPhase.WithLabelValues("Running").Inc()
 		p.metrics.podsRunning.Inc()
+		p.metrics.podsProvisioningDurationSecs.Add(dur)
 	} else {
 		p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "ProvisioningFailed", "Failed to provision pod after retries")
 		p.metrics.podsByPhase.WithLabelValues("Failed").Inc()
 	}
-
-	dur := time.Since(start).Seconds()
-	logger.Infof("Initializing instance %s for pod %s in %d seconds", vp.MachineStableID(), vp.ID(), int(dur))
-	p.metrics.podsProvisioningDurationSecs.Add(dur)
 }
 
 func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, authToken string) (machineID string, err error) {
@@ -399,13 +397,11 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, a
 		if err != nil {
 			p.eventRecorder.Eventf(pod, v1.EventTypeWarning, "MachineSearchFailed", "Failed to search for available machines")
 			p.metrics.podsProvisioningTotal.WithLabelValues("false", "rental_candidates_search_failed").Inc()
-			logger.Error(err)
 			return err
 		}
 
 		if len(offers) == 0 {
 			p.eventRecorder.Eventf(pod, v1.EventTypeWarning, "NoMachinesAvailable", "No machines matching requirements found, will retry")
-			logger.Warn("No offers matching pod's criteria found!!!")
 		} else {
 			p.eventRecorder.Eventf(pod, v1.EventTypeNormal, "MachinesFound", "Found %d machine(s) matching requirements", len(offers))
 		}

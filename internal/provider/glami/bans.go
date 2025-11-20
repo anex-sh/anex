@@ -8,7 +8,7 @@ import (
 )
 
 func (p *Provider) bansPersistenceEnabled() bool {
-	return p.config.VirtualKubelet.Provisioning.MachineBansStore.LocalFile.Enable
+	return p.config.Provisioning.MachineBansStore.LocalFile.Enable
 }
 
 func (p *Provider) getBansFilePath() string {

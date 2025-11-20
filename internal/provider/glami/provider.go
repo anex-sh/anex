@@ -109,7 +109,7 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 	}
 
 	// Load persisted machine bans if configured
-	if config.VirtualKubelet.Provisioning.MachineBansStore.LocalFile.Enable {
+	if config.Provisioning.MachineBansStore.LocalFile.Enable {
 
 		// TODO: Remove temporary init
 		if bansOverwrite := os.Getenv("BANS_OVERWRITE"); bansOverwrite != "" {
@@ -221,7 +221,7 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	// Add the pod's coordinates to the current span.
 	ctx = addAttributes(ctx, span, namespaceKey, pod.Namespace, nameKey, pod.Name)
 
-	log.G(ctx).Infof("receive CreatePod %q", pod.Name)
+	p.eventRecorder.Event(pod, v1.EventTypeNormal, "Creating", "Creating pod")
 
 	if len(pod.Spec.Containers) > 1 {
 		return fmt.Errorf("Glami Provider does not support multiple containers")
@@ -320,7 +320,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 	// Add the pod's coordinates to the current span.
 	ctx = addAttributes(ctx, span, namespaceKey, pod.Namespace, nameKey, pod.Name)
 
-	log.G(ctx).Infof("receive DeletePod %q", pod.Name)
+	p.eventRecorder.Event(pod, v1.EventTypeNormal, "Deleting", "Deleting pod")
 
 	key := buildKey(pod)
 
@@ -403,7 +403,6 @@ func (p *Provider) GetPodStatus(ctx context.Context, namespace, name string) (*v
 	ctx, span := trace.StartSpan(ctx, "ContainerState")
 	defer span.End()
 
-	log.G(ctx).Infof("receive ContainerState %q", name)
 	// Add namespace and name as attributes to the current span.
 	ctx = addAttributes(ctx, span, namespaceKey, namespace, nameKey, name)
 
@@ -485,6 +484,7 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 		}
 
 		if update.Restarts {
+			p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "ContainerRestarting", "Container is restarting due to failure")
 			p.metrics.containerRestarts.WithLabelValues(statusLabel).Inc()
 			p.metrics.podsRunning.Dec()
 
@@ -507,6 +507,7 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 		}
 
 		if update.Terminated {
+			p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeNormal, "ContainerTerminated", "Container terminated with status: %s", statusLabel)
 			p.metrics.podsByPhase.WithLabelValues(statusLabel).Inc()
 			p.metrics.podsRunning.Dec()
 

@@ -1,10 +1,4 @@
-cluster:
-  clusterUUID: ""
-
-cloudProvider:
-  vastAI:
-    apiKey: ""
-
+# Deployment-specific configuration
 virtualKubelet:
   image:
     repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
@@ -12,6 +6,38 @@ virtualKubelet:
 
   serviceAccount:
     annotations: {}
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "1000m"
+      memory: "512Mi"
+
+  affinity: {}
+    # nodeAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #     nodeSelectorTerms:
+    #     - matchExpressions:
+    #       - key: kubernetes.io/hostname
+    #         operator: In
+    #         values:
+    #         - node1
+
+  nodeSelector: {}
+    # kubernetes.io/hostname: node1
+
+# Application configuration
+appConfig:
+  logLevel: "info"
+
+  cluster:
+    clusterUUID: ""
+
+  cloudProvider:
+    vastAI:
+      apiKey: ""
 
   provisioning:
     maxRetries: 10
@@ -21,23 +47,23 @@ virtualKubelet:
         enable: true
         timeout: "1d"
 
-virtualNode:
-  nodeName: "virtual-node"
-  podLimit: "1"
-  cpu: "1000"
-  memory: "1000Gi"
-  labels: {}
-  taints: []
+  virtualNode:
+    nodeName: "virtual-node"
+    podLimit: "1"
+    cpu: "1000"
+    memory: "1000Gi"
+    labels: {}
+    taints: []
 
-agentAuthToken: ""
+  agentAuthToken: ""
 
-proxy:
-  enable: false
+  proxy:
+    enable: false
 
-promtail:
-  enable: false
-  clients: []
-    # - url: "https://example-loki-gateway.com/loki/api/v1/push"
-    #   basicAuth:
-    #     username: "username"
-    #     password: "password"
+  promtail:
+    enable: false
+    clients: []
+      # - url: "https://example-loki-gateway.com/loki/api/v1/push"
+      #   basicAuth:
+      #     username: "username"
+      #     password: "password"
