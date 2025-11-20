@@ -108,6 +108,9 @@ func sortCandidates(candidates []BundleOffer) []BundleOffer {
 }
 
 func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.MachineSpecification) ([]virtualpod.Offer, error) {
+	logger := log.G(ctx)
+	logger.Info("Fetching rental candidates from VastAI")
+
 	// url := c.baseURL + "/search/asks/"
 	url := c.baseURL + "/bundles/"
 	var offers []virtualpod.Offer
@@ -116,13 +119,13 @@ func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.Machin
 	// _, bundleOffer, err := utils.MakeRequest[BundleOffers](ctx, c.retryClient, http.MethodPut, url, filters, c.authHeader)
 	_, bundleOffer, err := utils.MakeRequest[BundleOffers](ctx, c.retryClient, http.MethodPost, url, filters, c.authHeader)
 	if err != nil {
+		logger.Errorf("Failed to fetch rental candidates: %v", err)
 		return offers, err
 	}
 	candidates := bundleOffer.Offers
 	candidatesSorted := sortCandidates(candidates)
 
-	logger := log.G(ctx)
-	logger.Infof("Found %d candidates for given pod (not considering price)", len(candidates))
+	logger.Infof("Found %d candidates (before price filtering)", len(candidates))
 
 	for _, candidate := range candidatesSorted {
 		// Check price constraints
@@ -138,13 +141,16 @@ func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.Machin
 		})
 	}
 
+	logger.Infof("Returning %d offers after filtering", len(offers))
 	return offers, nil
 }
 
 func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, authToken string, proxy, promtail bool) (machineID string, err error) {
 	logger := log.G(ctx)
+	logger.Infof("Attempting to provision machine from %d candidates", len(candidatesID))
 
 	if len(candidatesID) == 0 {
+		logger.Error("No instance candidates provided")
 		return "", fmt.Errorf("no instance candidates provided")
 	}
 
@@ -217,37 +223,40 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 		MachineID int  `json:"new_contract"`
 	}
 
-	for _, id := range candidatesID {
+	for idx, id := range candidatesID {
 		if ctx.Err() != nil {
+			logger.Info("Context cancelled, stopping provisioning attempts")
 			return "", ctx.Err()
 		}
 
-		logger.Infof("Attempting to provision instance with ID: %d", id)
+		logger.Infof("Attempting to provision instance %d/%d with offer ID: %s", idx+1, len(candidatesID), id)
 		url := fmt.Sprintf("%s/asks/%s/", c.baseURL, id)
 
 		// TODO: on bad request or auth error - fail pod immediately
 		statusCode, response, err := utils.MakeRequest[provisionInstanceResponse](ctx, c.retryClient, http.MethodPut, url, payload, c.authHeader)
 		if statusCode == 400 {
-			logger.Warnf("Request to provision instance %d failed with status code 400; bad payload", id)
+			logger.Warnf("Provisioning failed for offer %s: bad request (status 400)", id)
 			// return "", utils.ErrBadPayload
 			continue
 		}
 		if statusCode == 401 {
-			logger.Warnf("Request to provision instance %s failed with status code 401; unauthorized", id)
+			logger.Errorf("Provisioning failed for offer %s: unauthorized (status 401)", id)
 			return "", utils.ErrUnauthorized
 		}
 		if err != nil {
-			logger.Warnf("Request to provision instance %s failed: %v", id, err)
+			logger.Warnf("Provisioning failed for offer %s: %v", id, err)
 			continue
 		}
 		if !response.Success {
-			logger.Warnf("Failed to provision instance %s: API returned non-success status", id)
+			logger.Warnf("Provisioning failed for offer %s: API returned non-success status", id)
 			continue
 		}
 
+		logger.Infof("Successfully provisioned machine with ID: %d", response.MachineID)
 		return strconv.Itoa(response.MachineID), nil
 	}
 
+	logger.Error("Failed to provision instance from any of the provided candidates")
 	return "", fmt.Errorf("failed to provision instance")
 }
 
@@ -259,18 +268,21 @@ type GenericApiResponse struct {
 func (c *Client) DestroyMachine(ctx context.Context, id string) error {
 	// TODO: Make machine destroy graceful with SIGTERM and terminationGracePeriod
 	logger := log.G(ctx)
+	logger.Infof("Destroying machine: %s", id)
 	url := fmt.Sprintf("%s/instances/%s/", c.baseURL, id)
 
 	_, response, err := utils.MakeRequest[GenericApiResponse](ctx, c.retryClient, http.MethodDelete, url, nil, c.authHeader)
 	if err != nil {
+		logger.Errorf("Failed to destroy machine %s: %v", id, err)
 		return err
 	}
 
 	if !response.Success {
+		logger.Errorf("Failed to destroy machine %s: %s", id, response.Message)
 		return fmt.Errorf("failed to destroy instance: %s", response.Message)
 	}
 
-	logger.Infof("Instance %s destroyed", id)
+	logger.Infof("Successfully destroyed machine: %s", id)
 	return nil
 }
 
@@ -296,10 +308,16 @@ func parseMachineLabel(label string) *labelInfo {
 }
 
 func (c *Client) PruneDanglingMachines(ctx context.Context, podUIDs []string) error {
+	logger := log.G(ctx)
+	logger.Info("Starting dangling machines pruning")
+
 	machines, err := c.listMachinesInternal(ctx)
 	if err != nil {
+		logger.Errorf("Failed to list machines: %v", err)
 		return err
 	}
+
+	logger.Infof("Found %d machines to check", len(machines))
 
 	for _, machine := range machines {
 		label := parseMachineLabel(machine.Label)
@@ -320,19 +338,28 @@ func (c *Client) PruneDanglingMachines(ctx context.Context, podUIDs []string) er
 		}
 
 		if !active {
-			log.G(ctx).Infof("Deleting machine ID %d", machine.ID)
+			logger.Infof("Deleting dangling machine ID %d (label: %s)", machine.ID, machine.Label)
 			err = c.DestroyMachine(ctx, strconv.Itoa(machine.ID))
 			if err != nil {
-				log.G(ctx).Errorf("Error deleting machine ID %d; %s", machine.ID, err)
+				logger.Errorf("Error deleting dangling machine ID %d: %v", machine.ID, err)
 			}
 		}
 	}
 
+	logger.Info("Dangling machines pruning completed")
 	return nil
 }
 
 func (c *Client) RestartMachine(ctx context.Context, id string, pullImage bool) error {
-	log.G(ctx).Infof("Restarting machine ID %s", id)
+	logger := log.G(ctx)
+
+	restartType := "reboot"
+	if pullImage {
+		restartType = "recycle"
+		logger.Infof("Restarting machine %s with image pull (recycle)", id)
+	} else {
+		logger.Infof("Restarting machine %s without image pull (reboot)", id)
+	}
 
 	var url string
 	if pullImage {
@@ -343,10 +370,11 @@ func (c *Client) RestartMachine(ctx context.Context, id string, pullImage bool) 
 
 	_, _, err := utils.MakeRequest[GenericApiResponse](ctx, c.retryClient, http.MethodPut, url, nil, c.authHeader)
 	if err != nil {
-		log.G(ctx).Infof("Restart of machine ID %s failed", id)
+		logger.Errorf("Failed to restart machine %s (%s): %v", id, restartType, err)
 		return err
 	}
 
+	logger.Infof("Successfully restarted machine %s (%s)", id, restartType)
 	return nil
 }
 

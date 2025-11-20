@@ -241,7 +241,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 	defer p.machineCleanup(ctx, vp)
 
 	logger := log.G(ctx)
-	logger.Infof("Initializing instance for pod: %s", vp.ID())
+	logger.Info("Starting pod initialization")
 
 	var err error
 	var machineID string
@@ -252,27 +252,31 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 	op := func() error {
 		if restartOnly {
 			machineID = vp.MachineRentID()
+			logger.Infof("Restarting existing machine: %s", machineID)
 			p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeNormal, "Restarting", "Restarting machine %s", machineID)
 			err = p.restartPod(ctx, machineID, vp.ImagePullAlways())
 		} else {
+			logger.Info("Selecting and provisioning new machine")
 			machineID, err = p.selectAndProvisionMachine(ctx, vp.Pod(), vp.AuthToken())
 			// TODO: This is wrong, pod is not failed if provisioning still in progress
 			if err != nil {
-				// vp.FailContainer(err)
-				//p.notifyPodUpdate(vp.Pod())
+				logger.Errorf("Failed to select and provision machine: %v", err)
 				return err
 			}
 
 			vp.SetMachine(&virtualpod.Machine{
 				ID: machineID,
 			})
+			logger.Infof("Machine provisioned with ID: %s", machineID)
 		}
 
+		logger.Info("Waiting for machine to become ready")
 		p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeNormal, "MachineProvisioned", "Machine provisioned, waiting for startup")
 
 		err = p.waitForMachineReady(ctx, vp)
 		if err != nil {
 			if errors.Is(err, ErrMachineFailed) || errors.Is(err, context.DeadlineExceeded) {
+				logger.Warnf("Machine startup failed, banning machine: %s", vp.MachineStableID())
 				p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "MachineStartupFailed", "Machine failed to start, will retry with different machine")
 				p.mutex.Lock()
 				p.machineBans[vp.MachineStableID()] = time.Now()
@@ -285,6 +289,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			return ErrCandidateMachineFailed
 		}
 
+		logger.Info("Machine is running, initializing runtime environment")
 		p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeNormal, "MachineRunning", "Machine is running, initializing runtime environment")
 
 		// TODO: Change this to a proper backoff by wrapper function and callback for logging - remove network retry logging
@@ -299,34 +304,38 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 		agentCtx, agentStartUpCancel := context.WithTimeout(ctx, p.config.GetStartupTimeout())
 		defer agentStartUpCancel()
 
+		logger.Info("Waiting for agent to become ready")
 		err = vp.WaitForAgentReady(agentCtx, client)
 		if err != nil {
-			logger.Error("Agent startup timeout")
+			logger.Errorf("Agent startup timeout: %v", err)
 			p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "RuntimeInitFailed", "Failed to initialize container Agent")
 			p.metrics.podsProvisioningTotal.WithLabelValues("false", "agent_startup_timeout").Inc()
 			return ErrMachineFailed
 		}
 
+		logger.Info("Pushing environment variables to agent")
 		err = vp.PushEnvVars(agentCtx, client)
 		if err != nil {
-			logger.Error("Failed to push env vars")
+			logger.Errorf("Failed to push env vars: %v", err)
 			p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "RuntimeInitFailed", "Failed to configure runtime environment")
 			p.metrics.podsProvisioningTotal.WithLabelValues("false", "env_var_push_fail").Inc()
 			return ErrMachineFailed
 		}
 
+		logger.Info("Pushing config maps to agent")
 		err = vp.PushConfigMaps(agentCtx, client)
 		if err != nil {
-			logger.Error("Failed to push config maps")
+			logger.Errorf("Failed to push config maps: %v", err)
 			p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "RuntimeInitFailed", "Failed to configure runtime environment")
 			p.metrics.podsProvisioningTotal.WithLabelValues("false", "config_map_push_fail").Inc()
 			return ErrMachineFailed
 		}
 
 		if p.config.Proxy.Enable {
+			logger.Info("Pushing wireproxy config to agent")
 			err = vp.PushWireproxyConfig(agentCtx, client)
 			if err != nil {
-				logger.Error("Failed to push wireproxy config")
+				logger.Errorf("Failed to push wireproxy config: %v", err)
 				p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "RuntimeInitFailed", "Failed to configure runtime environment")
 				p.metrics.podsProvisioningTotal.WithLabelValues("false", "wireproxy_config_push_fail").Inc()
 				return ErrMachineFailed
@@ -341,23 +350,26 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 				Password: p.config.Promtail.Clients[0].BasicAuth.Password,
 			}
 
+			logger.Info("Pushing promtail config to agent")
 			err = vp.PushPromtailConfig(agentCtx, client, lokiConfig)
 			if err != nil {
-				logger.Error("Failed to start command")
+				logger.Errorf("Failed to push promtail config: %v", err)
 				p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "RuntimeInitFailed", "Failed to configure runtime environment")
 				p.metrics.podsProvisioningTotal.WithLabelValues("false", "cmd_start_fail").Inc()
 				return ErrMachineFailed
 			}
 		}
 
+		logger.Info("Starting container command")
 		err = vp.RunCommand(agentCtx, client)
 		if err != nil {
-			logger.Error("Failed to start command")
+			logger.Errorf("Failed to start command: %v", err)
 			p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "ContainerStartFailed", "Failed to start pod's command")
 			p.metrics.podsProvisioningTotal.WithLabelValues("false", "cmd_start_fail").Inc()
 			return ErrMachineFailed
 		}
 
+		logger.Info("Starting pod lifecycle reconciliation")
 		lifecycleCtx, lifecycleCancel := context.WithCancel(p.baseContext)
 		vp.LifecycleCancel = lifecycleCancel
 		go p.reconcilePodLifecycle(lifecycleCtx, vp)
@@ -368,12 +380,14 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 	if errMainLoop := backoff.Retry(op, bo); errMainLoop == nil {
 		vp.SetProvisioningCompleted()
 		dur := time.Since(start).Seconds()
+		logger.Infof("Pod initialization completed successfully in %.2f seconds", dur)
 		p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeNormal, "Started", "Container started successfully")
 		p.metrics.podsProvisioningTotal.WithLabelValues("true", "ok").Inc()
 		p.metrics.podsByPhase.WithLabelValues("Running").Inc()
 		p.metrics.podsRunning.Inc()
 		p.metrics.podsProvisioningDurationSecs.Add(dur)
 	} else {
+		logger.Errorf("Pod initialization failed after all retries: %v", errMainLoop)
 		p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "ProvisioningFailed", "Failed to provision pod after retries")
 		p.metrics.podsByPhase.WithLabelValues("Failed").Inc()
 	}
@@ -381,7 +395,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 
 func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, authToken string) (machineID string, err error) {
 	logger := log.G(ctx)
-	logger.Infof("Initializing instance for pod")
+	logger.Info("Selecting and provisioning machine")
 
 	bo := backoff.NewConstantBackOff(60 * time.Second)
 
@@ -390,30 +404,40 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, a
 		defer p.mutex.Unlock()
 		time.Sleep(1 * time.Second)
 
+		logger.Info("Searching for available machines matching requirements")
 		p.eventRecorder.Eventf(pod, v1.EventTypeNormal, "SearchingMachines", "Searching for available machines matching requirements")
 
 		machineSpec := newMachineSpecification(pod)
 		var offers []virtualpod.Offer
 		offers, err = p.client.GetRentalCandidates(ctx, machineSpec)
 		if err != nil {
+			logger.Errorf("Failed to search for available machines: %v", err)
 			p.eventRecorder.Eventf(pod, v1.EventTypeWarning, "MachineSearchFailed", "Failed to search for available machines")
 			p.metrics.podsProvisioningTotal.WithLabelValues("false", "rental_candidates_search_failed").Inc()
 			return err
 		}
 
 		if len(offers) == 0 {
+			logger.Warn("No machines matching requirements found, will retry")
 			p.eventRecorder.Eventf(pod, v1.EventTypeWarning, "NoMachinesAvailable", "No machines matching requirements found, will retry")
 		} else {
+			logger.Infof("Found %d machine(s) matching requirements", len(offers))
 			p.eventRecorder.Eventf(pod, v1.EventTypeNormal, "MachinesFound", "Found %d machine(s) matching requirements", len(offers))
 		}
 
 		// Filter out banned machines
 		var candidatesFiltered []string
 		banDuration := time.Duration(p.config.GetMachineBanDuration()) * time.Second
+		bannedCount := 0
 		for _, offer := range offers {
 			if banTime, banned := p.machineBans[offer.MachineID]; !banned || (banDuration > 0 && time.Since(banTime) > banDuration) {
 				candidatesFiltered = append(candidatesFiltered, offer.OfferID)
+			} else {
+				bannedCount++
 			}
+		}
+		if bannedCount > 0 {
+			logger.Infof("Filtered out %d banned machine(s), %d candidates remaining", bannedCount, len(candidatesFiltered))
 		}
 
 		machineID, err = p.client.ProvisionMachine(ctx, candidatesFiltered, pod, authToken, p.config.Proxy.Enable, p.config.Promtail.Enable)
@@ -432,7 +456,7 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, a
 
 func (p *Provider) waitForMachineReady(ctx context.Context, vp *virtualpod.VirtualPod) error {
 	logger := log.G(ctx)
-	logger.Infof("Waiting for machine to be running: %s", vp.MachineRentID())
+	logger.Infof("Waiting for machine %s to become ready", vp.MachineRentID())
 
 	retryCtx, cancel := context.WithTimeout(ctx, p.config.GetStartupTimeout())
 	defer cancel()
@@ -454,8 +478,10 @@ func (p *Provider) waitForMachineReady(ctx context.Context, vp *virtualpod.Virtu
 
 		switch machine.State {
 		case virtualpod.MachineStateRunning:
+			logger.Info("Machine is now in running state")
 			return nil
 		case virtualpod.MachineStateFailed:
+			logger.Error("Machine entered failed state")
 			return backoff.Permanent(ErrMachineFailed)
 		default:
 			return ErrMachineNotRunning

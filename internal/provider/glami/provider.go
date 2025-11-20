@@ -214,6 +214,8 @@ func (p *Provider) getProxyConfigForVirtualPod() (int, *virtualpod.ProxyClientCo
 // CreatePod accepts a pod definition and stores it in memory.
 func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	logger := log.G(p.baseContext)
+	logger = logger.WithFields(log.Fields{"pod.name": pod.Name, "pod.namespace": pod.Namespace})
+
 	p.metrics.createPodOperationsTotal.Inc()
 	p.metrics.podsByPhase.WithLabelValues("Pending").Inc()
 	ctx, span := trace.StartSpan(ctx, "CreatePod")
@@ -222,6 +224,7 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	// Add the pod's coordinates to the current span.
 	ctx = addAttributes(ctx, span, namespaceKey, pod.Namespace, nameKey, pod.Name)
 
+	logger.Info("Creating pod")
 	p.eventRecorder.Event(pod, v1.EventTypeNormal, "Creating", "Creating pod")
 
 	if len(pod.Spec.Containers) > 1 {
@@ -327,12 +330,14 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 	// Add the pod's coordinates to the current span.
 	ctx = addAttributes(ctx, span, namespaceKey, pod.Namespace, nameKey, pod.Name)
 
+	logger.Info("Deleting pod")
 	p.eventRecorder.Event(pod, v1.EventTypeNormal, "Deleting", "Deleting pod")
 
 	key := buildKey(pod)
 
 	vp, exists := p.virtualPods[key]
 	if !exists {
+		logger.Warn("Pod not found during deletion")
 		return errdefs.NotFound("pod not found")
 	}
 
@@ -344,18 +349,20 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 	//		 Complete refactoring needed!
 	if vp.ProvisioningCompleted() {
 		if !vp.Finalized() {
+			logger.Info("Terminating container and destroying machine")
 			vp.LifecycleCancel()
 			vp.TerminateContainer(0)
 
 			err = p.client.DestroyMachine(p.baseContext, vp.MachineRentID())
 			if err != nil {
-				logger.Infof("Error destroying instance: %v", err)
+				logger.Errorf("Error destroying instance: %v", err)
 				return err
 			}
 
 			p.clientProxySettings[vp.ProxySlot()].Assigned = false
 			vp.Finalize()
 
+			logger.Info("Machine destroyed and resources cleaned up")
 			p.metrics.podsRunning.Dec()
 			p.metrics.podsByPhase.WithLabelValues("Deleted").Inc()
 		}
@@ -363,6 +370,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 		delete(p.virtualPods, key)
 		p.mutex.Unlock()
 	} else {
+		logger.Info("Cancelling provisioning for pod")
 		vp.ProvisionCancel()
 		p.mutex.Lock()
 		p.clientProxySettings[vp.ProxySlot()].Assigned = false
@@ -490,7 +498,8 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 		}
 
 		if update.Restarts {
-			p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "ContainerRestarting", "Container is restarting due to failure")
+			logger.Warnf("Container is restarting")
+			p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "ContainerRestarting", "Container is restarting")
 			p.metrics.containerRestarts.WithLabelValues(statusLabel).Inc()
 			p.metrics.podsRunning.Dec()
 
@@ -513,10 +522,12 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 		}
 
 		if update.Terminated {
+			logger.Infof("Container terminated with status: %s", statusLabel)
 			p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeNormal, "ContainerTerminated", "Container terminated with status: %s", statusLabel)
 			p.metrics.podsByPhase.WithLabelValues(statusLabel).Inc()
 			p.metrics.podsRunning.Dec()
 
+			logger.Info("Finalizing pod after container termination")
 			p.mutex.Lock()
 			key := buildKey(vp.Pod())
 			p.virtualPods[key].LifecycleCancel()
