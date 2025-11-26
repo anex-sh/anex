@@ -33,7 +33,8 @@ type Provider struct {
 	internalIP            string
 	daemonEndpointPort    int32
 	virtualPods           map[string]*virtualpod.VirtualPod
-	restoredVirtualPods   map[string]*virtualpod.VirtualPod
+	virtualPodsRestored   map[string]*virtualpod.VirtualPod
+	virtualPodsToRestart  map[string]*virtualpod.VirtualPod
 	podUpdateCh           chan *v1.Pod
 	config                ProviderConfig
 	startTime             time.Time
@@ -87,7 +88,8 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 		internalIP:            internalIP,
 		daemonEndpointPort:    daemonEndpointPort,
 		virtualPods:           make(map[string]*virtualpod.VirtualPod),
-		restoredVirtualPods:   make(map[string]*virtualpod.VirtualPod),
+		virtualPodsRestored:   make(map[string]*virtualpod.VirtualPod),
+		virtualPodsToRestart:  make(map[string]*virtualpod.VirtualPod),
 		podUpdateCh:           make(chan *v1.Pod, 100),
 		config:                config,
 		startTime:             time.Now(),
@@ -144,28 +146,34 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 			continue
 		}
 
-		if machine, ok := podsMachinesMapping[string(pod.UID)]; ok {
-			key := buildKey(&pod)
-			proxySlotIndex, _ := strconv.Atoi(pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"])
-			clientConfig, _ := provider.getProxyConfigById(proxySlotIndex)
-			proxyConfig := &virtualpod.ProxyConfig{
-				Server: provider.serverProxySettings,
-				Client: *clientConfig,
-			}
-			vp := virtualpod.NewVirtualPod(key, &pod, machine, proxyConfig, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
-			vp.SetProvisioningCompleted()
-			provider.restoredVirtualPods[key] = vp
-		} else {
-			pod.Status.Phase = v1.PodFailed
-			pod.Status.ContainerStatuses[0].State = v1.ContainerState{
-				Terminated: &v1.ContainerStateTerminated{
-					ExitCode:   1,
-					Reason:     "Failed",
-					FinishedAt: metav1.Now(),
-				},
-			}
+		// Restore configs
+		key := buildKey(&pod)
+		proxySlotIndex, _ := strconv.Atoi(pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"])
+		clientConfig, _ := provider.getProxyConfigById(proxySlotIndex)
+		proxyConfig := &virtualpod.ProxyConfig{
+			Server: provider.serverProxySettings,
+			Client: *clientConfig,
+		}
 
-			provider.notifyPodUpdate(pod.DeepCopy())
+		if machine, ok := podsMachinesMapping[string(pod.UID)]; ok {
+			vp := virtualpod.NewVirtualPod(key, &pod, machine, proxyConfig, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
+			vp.SetProvisioningCompleted(true)
+			provider.virtualPodsRestored[key] = vp
+		} else {
+			if pod.Spec.RestartPolicy != v1.RestartPolicyNever {
+				vp := virtualpod.NewVirtualPod(key, &pod, &virtualpod.Machine{}, proxyConfig, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
+				provider.virtualPodsToRestart[key] = vp
+			} else {
+				pod.Status.Phase = v1.PodFailed
+				pod.Status.ContainerStatuses[0].State = v1.ContainerState{
+					Terminated: &v1.ContainerStateTerminated{
+						ExitCode:   1,
+						Reason:     "Failed",
+						FinishedAt: metav1.Now(),
+					},
+				}
+				provider.notifyPodUpdate(pod.DeepCopy())
+			}
 		}
 	}
 
@@ -385,7 +393,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 		if !vp.Finalized() {
 			logger.Infof("Terminating machine %s", vp.MachineRentID())
 			vp.LifecycleCancel()
-			vp.TerminateContainer(0)
+			vp.TerminatePod(0)
 
 			err = p.client.DestroyMachine(p.baseContext, vp.MachineRentID())
 			if err != nil {
@@ -410,7 +418,7 @@ func (p *Provider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 		p.clientProxySettings[vp.ProxySlot()].Assigned = false
 		delete(p.virtualPods, key)
 		p.mutex.Unlock()
-		vp.TerminateContainer(0)
+		vp.TerminatePod(0)
 		// TODO: What about pod's phase??
 	}
 
@@ -505,9 +513,13 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 
 	client := retryablehttp.NewClient()
 	client.RetryWaitMin = 1 * time.Second
-	client.RetryWaitMax = 5 * time.Second
+	client.RetryWaitMax = 4 * time.Second
+	client.RetryMax = 4
 	client.HTTPClient.Timeout = 10 * time.Second
 	client.Logger = nil
+
+	lastStatusUpdateTime := time.Now()
+	statusReportTimeout := p.config.GetStatusReportTimeout()
 
 	reconcile := func() {
 		// TODO: Refactor this!
@@ -518,11 +530,26 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 		}
 
 		logger.Debugf("Reconcile loop for pod %s", vp.PodName())
-
 		update, err := vp.PodStatusUpdate(ctx, client)
 		if err != nil {
 			logger.Warnf("Error getting pod status: %v", err)
-			return
+
+			if time.Since(lastStatusUpdateTime) > statusReportTimeout {
+				logger.Errorf("Pod status report timeout exceeded (%v), failing pod", statusReportTimeout)
+				restarts := vp.Pod().Spec.RestartPolicy != v1.RestartPolicyNever
+				if !restarts {
+					vp.FailContainer("Pod stopped responding")
+				}
+
+				update = virtualpod.StatusUpdate{
+					Changed:    true,
+					Terminated: !restarts,
+					Succeeded:  false,
+					Restarts:   restarts,
+				}
+			}
+		} else {
+			lastStatusUpdateTime = time.Now()
 		}
 
 		if update.Changed {

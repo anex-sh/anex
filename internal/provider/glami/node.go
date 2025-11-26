@@ -137,12 +137,27 @@ func (p *Provider) ConfigureNode(ctx context.Context, n *v1.Node) {
 	}
 
 	// Start reconcile loop for the restored pods
-	for key, vp := range p.restoredVirtualPods {
+	for key, vp := range p.virtualPodsRestored {
 		lifecycleCtx, lifecycleCancel := context.WithCancel(p.baseContext)
 		vp.LifecycleCancel = lifecycleCancel
 		p.virtualPods[key] = vp
 		go p.reconcilePodLifecycle(lifecycleCtx, vp)
-		delete(p.restoredVirtualPods, key)
+		delete(p.virtualPodsRestored, key)
+	}
+
+	// Provision pods with restart policy that lost machines
+	for key, vp := range p.virtualPodsToRestart {
+		createCtx, cancel := context.WithCancel(p.baseContext)
+		annotatedLogger := logger.WithFields(log.Fields{"pod.name": vp.PodName(), "pod.namespace": vp.PodNamespace()})
+		createCtx = log.WithLogger(createCtx, annotatedLogger)
+
+		vp.ProvisionCancel = cancel
+		p.mutex.Lock()
+		p.virtualPods[key] = vp
+		p.mutex.Unlock()
+
+		p.provisioningWG.Add(1)
+		go p.initializeVirtualPod(createCtx, vp, false)
 	}
 
 	// Start the notifier goroutine

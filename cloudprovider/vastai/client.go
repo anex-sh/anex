@@ -99,7 +99,7 @@ func (c *Client) GetMachine(ctx context.Context, machineID string) (machine *vir
 
 	type MachineResponse struct {
 		Instance struct {
-			Machine
+			*Machine
 		} `json:"instances"`
 	}
 
@@ -107,8 +107,11 @@ func (c *Client) GetMachine(ctx context.Context, machineID string) (machine *vir
 	if err != nil {
 		return nil, err
 	}
+	if response.Instance.Machine == nil {
+		return nil, fmt.Errorf("machine ID=%s not found", machineID)
+	}
 
-	machine = GenericMachineAdapter(&response.Instance.Machine)
+	machine = GenericMachineAdapter(response.Instance.Machine)
 	return machine, nil
 }
 
@@ -390,6 +393,11 @@ func (c *Client) PruneDanglingMachines(ctx context.Context, podUIDs []string) er
 func (c *Client) RestartMachine(ctx context.Context, id string, pullImage bool) error {
 	logger := log.G(ctx)
 
+	_, err := c.GetMachine(ctx, id)
+	if err != nil {
+		return err
+	}
+
 	restartType := "reboot"
 	if pullImage {
 		restartType = "recycle"
@@ -405,10 +413,14 @@ func (c *Client) RestartMachine(ctx context.Context, id string, pullImage bool) 
 		url = fmt.Sprintf("%s/instances/reboot/%s", c.baseURL, id)
 	}
 
-	_, _, err := utils.MakeRequest[GenericApiResponse](ctx, c.retryClient, http.MethodPut, url, nil, c.authHeader)
+	_, response, err := utils.MakeRequest[GenericApiResponse](ctx, c.retryClient, http.MethodPut, url, nil, c.authHeader)
 	if err != nil {
 		logger.Errorf("Failed to restart machine %s (%s): %v", id, restartType, err)
 		return err
+	}
+	if !response.Success {
+		logger.Errorf("Failed to restart machine %s: %s", id, response.Message)
+		return fmt.Errorf("failed to restart machine %s: %s", id, response.Message)
 	}
 
 	logger.Infof("Successfully restarted machine %s (%s)", id, restartType)

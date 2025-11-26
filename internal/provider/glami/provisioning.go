@@ -16,6 +16,7 @@ import (
 )
 
 var (
+	ErrMachineNotFound        = errors.New("machine not found")
 	ErrMachineNotRunning      = errors.New("machine not running")
 	ErrMachineFailed          = errors.New("machine failed")
 	ErrCandidateMachineFailed = errors.New("candidate failed")
@@ -254,7 +255,13 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			machineID = vp.MachineRentID()
 			logger.Infof("Restarting existing machine: %s", machineID)
 			p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeNormal, "Restarting", "Restarting machine %s", machineID)
+			// TODO: Refactor provisioning state
+			vp.SetProvisioningCompleted(false)
 			err = p.restartPod(ctx, machineID, vp.ImagePullAlways())
+			if err != nil {
+				restartOnly = false
+				return err
+			}
 		} else {
 			logger.Info("Selecting and provisioning new machine")
 			machineID, err = p.selectAndProvisionMachine(ctx, vp.Pod(), vp.AuthToken())
@@ -378,7 +385,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 	}
 
 	if errMainLoop := backoff.Retry(op, bo); errMainLoop == nil {
-		vp.SetProvisioningCompleted()
+		vp.SetProvisioningCompleted(true)
 		dur := time.Since(start).Seconds()
 		logger.Infof("Pod initialization completed successfully in %.2f seconds", dur)
 		p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeNormal, "Started", "Container started successfully")
@@ -472,6 +479,9 @@ func (p *Provider) waitForMachineReady(ctx context.Context, vp *virtualpod.Virtu
 		machine, err := p.client.GetMachine(retryCtx, vp.MachineRentID())
 		if err != nil {
 			return err
+		}
+		if machine == nil {
+			return ErrMachineNotFound
 		}
 
 		vp.SetMachine(machine)

@@ -42,6 +42,7 @@ appConfig:
   provisioning:
     maxRetries: 10
     startupTimeout: "10m"
+    statusReportTimeout: "2m"
     machineBansStore:
       localFile:
         enable: true

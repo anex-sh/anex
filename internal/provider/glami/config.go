@@ -56,9 +56,10 @@ type MachineBansStoreConfig struct {
 
 // ProvisioningConfig holds provisioning configuration
 type ProvisioningConfig struct {
-	MaxRetries       int                    `yaml:"maxRetries,omitempty"`
-	StartupTimeout   string                 `yaml:"startupTimeout,omitempty"`
-	MachineBansStore MachineBansStoreConfig `yaml:"machineBansStore"`
+	MaxRetries          int                    `yaml:"maxRetries,omitempty"`
+	StartupTimeout      string                 `yaml:"startupTimeout,omitempty"`
+	StatusReportTimeout string                 `yaml:"statusReportTimeout,omitempty"`
+	MachineBansStore    MachineBansStoreConfig `yaml:"machineBansStore"`
 }
 
 // TaintConfig holds a taint entry for the virtual node
@@ -164,6 +165,9 @@ func (c *ProviderConfig) overrideWithEnv() {
 	if val := os.Getenv(getEnvWithPrefix("provisioning", "startupTimeout")); val != "" {
 		c.Provisioning.StartupTimeout = val
 	}
+	if val := os.Getenv(getEnvWithPrefix("provisioning", "statusReportTimeout")); val != "" {
+		c.Provisioning.StatusReportTimeout = val
+	}
 	if val := os.Getenv(getEnvWithPrefix("provisioning", "machineBansStore", "localFile", "enable")); val != "" {
 		c.Provisioning.MachineBansStore.LocalFile.Enable = val == "true"
 	}
@@ -253,6 +257,20 @@ func (c *ProviderConfig) GetStartupTimeout() time.Duration {
 	return duration
 }
 
+// GetStatusReportTimeout returns the status report timeout as a time.Duration
+func (c *ProviderConfig) GetStatusReportTimeout() time.Duration {
+	if c.Provisioning.StatusReportTimeout == "" {
+		return 5 * time.Minute // default
+	}
+
+	duration, err := parseDuration(c.Provisioning.StatusReportTimeout)
+	if err != nil {
+		return 5 * time.Minute // fallback to default
+	}
+
+	return duration
+}
+
 // loadConfig loads the given YAML configuration file. Node name is ignored.
 func loadConfig(providerConfig string) (config ProviderConfig, err error) {
 	data, err := os.ReadFile(providerConfig)
@@ -279,6 +297,9 @@ func loadConfig(providerConfig string) (config ProviderConfig, err error) {
 	}
 	if config.Provisioning.StartupTimeout == "" {
 		config.Provisioning.StartupTimeout = "10m"
+	}
+	if config.Provisioning.StatusReportTimeout == "" {
+		config.Provisioning.StatusReportTimeout = "2m"
 	}
 	if config.Provisioning.MachineBansStore.LocalFile.Timeout == "" {
 		config.Provisioning.MachineBansStore.LocalFile.Timeout = "1d"

@@ -134,10 +134,10 @@ func (vp *VirtualPod) ProvisioningCompleted() bool {
 	return vp.provisioningCompleted
 }
 
-func (vp *VirtualPod) SetProvisioningCompleted() {
+func (vp *VirtualPod) SetProvisioningCompleted(completed bool) {
 	vp.mutex.Lock()
 	defer vp.mutex.Unlock()
-	vp.provisioningCompleted = true
+	vp.provisioningCompleted = completed
 	vp.readySince = time.Now()
 }
 
@@ -364,7 +364,7 @@ func (vp *VirtualPod) CrashLoopBackOffDone() {
 	vp.pod.Status.ContainerStatuses[0].State.Waiting.Reason = "ContainerCreating"
 }
 
-func (vp *VirtualPod) FailContainer(err error) {
+func (vp *VirtualPod) FailContainer(message string) {
 	vp.mutex.Lock()
 	defer vp.mutex.Unlock()
 
@@ -373,7 +373,7 @@ func (vp *VirtualPod) FailContainer(err error) {
 		Terminated: &v1.ContainerStateTerminated{
 			ExitCode:   1,
 			Reason:     "Failed",
-			Message:    err.Error(),
+			Message:    message,
 			StartedAt:  metav1.Now(),
 			FinishedAt: metav1.Now(),
 		},
@@ -382,10 +382,16 @@ func (vp *VirtualPod) FailContainer(err error) {
 	vp.handleContainerTermination(failContainerState)
 }
 
-// TerminateContainer TODO: Make right with SIGTERM
-func (vp *VirtualPod) TerminateContainer(exitCode int32) {
+// TerminatePod TODO: Make right with SIGTERM
+func (vp *VirtualPod) TerminatePod(exitCode int32) {
 	vp.mutex.Lock()
 	defer vp.mutex.Unlock()
+
+	if exitCode == 0 {
+		vp.pod.Status.Phase = v1.PodSucceeded
+	} else {
+		vp.pod.Status.Phase = v1.PodFailed
+	}
 
 	deleteContainerState := v1.ContainerState{
 		Terminated: &v1.ContainerStateTerminated{
@@ -400,18 +406,4 @@ func (vp *VirtualPod) TerminateContainer(exitCode int32) {
 	}
 
 	vp.handleContainerTermination(deleteContainerState)
-}
-
-func (vp *VirtualPod) FailPod(message string) {
-	failContainerState := v1.ContainerState{
-		Terminated: &v1.ContainerStateTerminated{
-			ExitCode:   1,
-			Reason:     "Failed",
-			Message:    message,
-			StartedAt:  metav1.Now(),
-			FinishedAt: metav1.Now(),
-		},
-	}
-
-	vp.handleContainerTermination(failContainerState)
 }
