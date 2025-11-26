@@ -12,8 +12,7 @@ func (p *Provider) bansPersistenceEnabled() bool {
 }
 
 func (p *Provider) getBansFilePath() string {
-	// Default path if not specified
-	return "/tmp/machine-bans.json"
+	return p.config.Provisioning.MachineBansStore.LocalFile.Path
 }
 
 // TODO: Allow DB option for this

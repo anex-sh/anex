@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -115,10 +116,25 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 
 	// Load persisted machine bans if configured
 	if config.Provisioning.MachineBansStore.LocalFile.Enable {
+		// Ensure the bans file exists with empty JSON if it doesn't exist
+		bansPath := provider.getBansFilePath()
+		if _, err := os.Stat(bansPath); os.IsNotExist(err) {
+			// Create directory if it doesn't exist
+			if err := os.MkdirAll(filepath.Dir(bansPath), 0o755); err != nil {
+				log.G(ctx).Errorf("failed to create directory for bans file: %v", err)
+			} else {
+				// Create file with empty JSON object
+				emptyJSON := []byte("{}")
+				if err := os.WriteFile(bansPath, emptyJSON, 0o600); err != nil {
+					log.G(ctx).Errorf("failed to create bans file with empty JSON: %v", err)
+				} else {
+					log.G(ctx).Infof("created bans file with empty JSON at %s", bansPath)
+				}
+			}
+		}
 
 		// TODO: Remove temporary init
 		if bansOverwrite := os.Getenv("BANS_OVERWRITE"); bansOverwrite != "" {
-			bansPath := provider.getBansFilePath()
 			if err := os.WriteFile(bansPath, []byte(bansOverwrite), 0o600); err != nil {
 				log.G(ctx).Errorf("failed to write bans overwrite to file: %v", err)
 			} else {

@@ -46,6 +46,7 @@ type CloudProviderConfig struct {
 // MachineBansStoreLocalFileConfig holds local file configuration for machine bans
 type MachineBansStoreLocalFileConfig struct {
 	Enable  bool   `yaml:"enable"`
+	Path    string `yaml:"path,omitempty"`
 	Timeout string `yaml:"timeout,omitempty"`
 }
 
@@ -170,6 +171,9 @@ func (c *ProviderConfig) overrideWithEnv() {
 	}
 	if val := os.Getenv(getEnvWithPrefix("provisioning", "machineBansStore", "localFile", "enable")); val != "" {
 		c.Provisioning.MachineBansStore.LocalFile.Enable = val == "true"
+	}
+	if val := os.Getenv(getEnvWithPrefix("provisioning", "machineBansStore", "localFile", "path")); val != "" {
+		c.Provisioning.MachineBansStore.LocalFile.Path = val
 	}
 	if val := os.Getenv(getEnvWithPrefix("provisioning", "machineBansStore", "localFile", "timeout")); val != "" {
 		c.Provisioning.MachineBansStore.LocalFile.Timeout = val
@@ -300,6 +304,9 @@ func loadConfig(providerConfig string) (config ProviderConfig, err error) {
 	}
 	if config.Provisioning.StatusReportTimeout == "" {
 		config.Provisioning.StatusReportTimeout = "2m"
+	}
+	if config.Provisioning.MachineBansStore.LocalFile.Path == "" {
+		config.Provisioning.MachineBansStore.LocalFile.Path = "/tmp/machine-bans.json"
 	}
 	if config.Provisioning.MachineBansStore.LocalFile.Timeout == "" {
 		config.Provisioning.MachineBansStore.LocalFile.Timeout = "1d"
