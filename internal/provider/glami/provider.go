@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -32,6 +33,7 @@ type Provider struct {
 	internalIP            string
 	daemonEndpointPort    int32
 	virtualPods           map[string]*virtualpod.VirtualPod
+	restoredVirtualPods   map[string]*virtualpod.VirtualPod
 	podUpdateCh           chan *v1.Pod
 	config                ProviderConfig
 	startTime             time.Time
@@ -85,6 +87,7 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 		internalIP:            internalIP,
 		daemonEndpointPort:    daemonEndpointPort,
 		virtualPods:           make(map[string]*virtualpod.VirtualPod),
+		restoredVirtualPods:   make(map[string]*virtualpod.VirtualPod),
 		podUpdateCh:           make(chan *v1.Pod, 100),
 		config:                config,
 		startTime:             time.Now(),
@@ -128,23 +131,42 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 
 	provider.metrics = NewMetrics()
 
-	// List pods for virtual node as registered by apiserver
-	//pods, err := listPodsForNode(ctx, clientSet, provider.nodeName)
-	//if err != nil {
-	//	return nil, fmt.Errorf("error listing pods: %v", err)
-	//}
-
-	// Delete any dangling machines with non-matching pod UID
-	// TODO: Enable pod listing after machine to pod mapping fix
-	var podUIDS []string
-	//for _, pod := range pods.Items {
-	//	podUIDS = append(podUIDS, string(pod.UID))
-	//}
-
-	// TODO: Map running machines to pods
-	err = provider.client.PruneDanglingMachines(ctx, podUIDS)
+	// Map existing machines to running pods
+	pods, err := listPodsForNode(ctx, clientSet, provider.nodeName)
 	if err != nil {
-		log.G(ctx).Errorf("failed to prune dangling machines: %v", err)
+		return nil, fmt.Errorf("error listing pods: %v", err)
+	}
+
+	podsMachinesMapping, err := provider.client.MapRunningMachines(ctx, pods)
+
+	for _, pod := range pods.Items {
+		if pod.Status.Phase != v1.PodRunning {
+			continue
+		}
+
+		if machine, ok := podsMachinesMapping[string(pod.UID)]; ok {
+			key := buildKey(&pod)
+			proxySlotIndex, _ := strconv.Atoi(pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"])
+			clientConfig, _ := provider.getProxyConfigById(proxySlotIndex)
+			proxyConfig := &virtualpod.ProxyConfig{
+				Server: provider.serverProxySettings,
+				Client: *clientConfig,
+			}
+			vp := virtualpod.NewVirtualPod(key, &pod, machine, proxyConfig, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
+			vp.SetProvisioningCompleted()
+			provider.restoredVirtualPods[key] = vp
+		} else {
+			pod.Status.Phase = v1.PodFailed
+			pod.Status.ContainerStatuses[0].State = v1.ContainerState{
+				Terminated: &v1.ContainerStateTerminated{
+					ExitCode:   1,
+					Reason:     "Failed",
+					FinishedAt: metav1.Now(),
+				},
+			}
+
+			provider.notifyPodUpdate(pod.DeepCopy())
+		}
 	}
 
 	return &provider, nil
@@ -211,6 +233,16 @@ func (p *Provider) getProxyConfigForVirtualPod() (int, *virtualpod.ProxyClientCo
 	return 0, nil, fmt.Errorf("no proxy keys available")
 }
 
+func (p *Provider) getProxyConfigById(id int) (*virtualpod.ProxyClientConfig, error) {
+	proxy := p.clientProxySettings[id]
+	if proxy.Assigned {
+		return nil, fmt.Errorf("proxy slot id=%d already assigned", id)
+	}
+
+	proxy.Assigned = true
+	return proxy, nil
+}
+
 // CreatePod accepts a pod definition and stores it in memory.
 func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	logger := log.G(p.baseContext)
@@ -248,6 +280,8 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 			Server: p.serverProxySettings,
 			Client: *clientConfig,
 		}
+
+		pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"] = strconv.Itoa(proxyIndex)
 	}
 
 	now := metav1.NewTime(time.Now())
@@ -277,6 +311,7 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		},
 	})
 
+	p.notifyPodUpdate(pod)
 	configMaps := p.loadMountedConfigMaps(ctx, pod)
 	mountPaths, _ := buildMountedConfigMaps(pod, configMaps)
 
@@ -288,7 +323,9 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	createCtx = log.WithLogger(createCtx, annotatedLogger)
 
 	vp.ProvisionCancel = cancel
+	p.mutex.Lock()
 	p.virtualPods[key] = vp
+	p.mutex.Unlock()
 
 	p.provisioningWG.Add(1)
 	go p.initializeVirtualPod(createCtx, vp, false)
@@ -467,7 +504,7 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 	defer ticker.Stop()
 
 	client := retryablehttp.NewClient()
-	client.RetryWaitMin = 200 * time.Millisecond
+	client.RetryWaitMin = 1 * time.Second
 	client.RetryWaitMax = 5 * time.Second
 	client.HTTPClient.Timeout = 10 * time.Second
 	client.Logger = nil
@@ -479,6 +516,8 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 		if ctx.Err() != nil {
 			return
 		}
+
+		logger.Debugf("Reconcile loop for pod %s", vp.PodName())
 
 		update, err := vp.PodStatusUpdate(ctx, client)
 		if err != nil {

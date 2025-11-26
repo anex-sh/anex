@@ -136,6 +136,15 @@ func (p *Provider) ConfigureNode(ctx context.Context, n *v1.Node) {
 		n.Spec.Taints = append(n.Spec.Taints, taint)
 	}
 
+	// Start reconcile loop for the restored pods
+	for key, vp := range p.restoredVirtualPods {
+		lifecycleCtx, lifecycleCancel := context.WithCancel(p.baseContext)
+		vp.LifecycleCancel = lifecycleCancel
+		p.virtualPods[key] = vp
+		go p.reconcilePodLifecycle(lifecycleCtx, vp)
+		delete(p.restoredVirtualPods, key)
+	}
+
 	// Start the notifier goroutine
 	go func(ctx context.Context) {
 		for {

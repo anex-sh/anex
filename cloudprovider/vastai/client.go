@@ -53,7 +53,20 @@ func (c *Client) listMachinesInternal(ctx context.Context) ([]*Machine, error) {
 		return nil, err
 	}
 
-	return machineList.Instances, nil
+	// Filter machines that match clusterUID and node name. Drop the rest.
+	var filteredMachines []*Machine
+	for _, machine := range machineList.Instances {
+		label := parseMachineLabel(machine.Label)
+		if label == nil {
+			continue
+		}
+
+		if label.ClusterUID == c.clusterUID && label.NodeName == c.nodeName {
+			filteredMachines = append(filteredMachines, machine)
+		}
+	}
+
+	return filteredMachines, nil
 }
 
 func (c *Client) ListMachines(ctx context.Context) ([]*virtualpod.Machine, error) {
@@ -305,6 +318,30 @@ func parseMachineLabel(label string) *labelInfo {
 		NodeName:   parts[2],
 		PodUID:     parts[3],
 	}
+}
+
+func (c *Client) MapRunningMachines(ctx context.Context, pods *v1.PodList) (map[string]*virtualpod.Machine, error) {
+	machines, err := c.listMachinesInternal(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]*virtualpod.Machine)
+	for _, machine := range machines {
+		label := parseMachineLabel(machine.Label)
+		if label == nil {
+			continue
+		}
+
+		for _, pod := range pods.Items {
+			if string(pod.UID) == label.PodUID {
+				result[label.PodUID] = GenericMachineAdapter(machine)
+				break
+			}
+		}
+	}
+
+	return result, nil
 }
 
 func (c *Client) PruneDanglingMachines(ctx context.Context, podUIDs []string) error {

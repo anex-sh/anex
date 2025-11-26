@@ -78,8 +78,8 @@ func (vp *VirtualPod) SetMachine(machine *Machine) {
 	vp.mutex.RLock()
 	defer vp.mutex.RUnlock()
 	vp.machine = machine
-	vp.pod.ObjectMeta.Annotations["glami.cz/vastai-machine-rent-id"] = machine.ID
-	vp.pod.ObjectMeta.Annotations["glami.cz/vastai-machine-stable-id"] = machine.MachineID
+	vp.pod.ObjectMeta.Annotations["gpu-provider.glami.cz/vastai-machine-rent-id"] = machine.ID
+	vp.pod.ObjectMeta.Annotations["gpu-provider.glami.cz/vastai-machine-stable-id"] = machine.MachineID
 }
 
 func (vp *VirtualPod) RemoveMachine() {
@@ -400,4 +400,18 @@ func (vp *VirtualPod) TerminateContainer(exitCode int32) {
 	}
 
 	vp.handleContainerTermination(deleteContainerState)
+}
+
+func (vp *VirtualPod) FailPod(message string) {
+	failContainerState := v1.ContainerState{
+		Terminated: &v1.ContainerStateTerminated{
+			ExitCode:   1,
+			Reason:     "Failed",
+			Message:    message,
+			StartedAt:  metav1.Now(),
+			FinishedAt: metav1.Now(),
+		},
+	}
+
+	vp.handleContainerTermination(failContainerState)
 }
