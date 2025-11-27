@@ -34,11 +34,11 @@ spec:
           env:
             - name: VIRTUAL_NODE_PODS
               value: "100"
-            {{- if .Values.proxy.enable }}
+            {{- if .Values.gateway.enable }}
             - name: PROXY_CONFIG_PATH
               value: "/proxy-config.yaml"
             {{- end }}
-            {{- if .Values.appConfig.proxy.enable }}
+            {{- if .Values.gateway.enable }}
             - name: PROXY_ENABLE
               value: "true"
             {{- end }}
@@ -53,7 +53,7 @@ spec:
               mountPath: /virtual-kubelet-config.yaml
               subPath: virtual-kubelet-config.yaml
               readOnly: true
-          {{- if .Values.proxy.enable }}
+          {{- if .Values.gateway.enable }}
             - name: proxy-config
               mountPath: /proxy-config.yaml
               subPath: proxy-config.yaml
@@ -63,9 +63,9 @@ spec:
         - name: vk-config
           configMap:
             name: "{{ include "chart.fullname" . }}-virtual-kubelet-config"
-        {{- if .Values.proxy.enable }}
+        {{- if .Values.gateway.enable }}
         - name: proxy-config
           secret:
-            secretName: glami-provider-proxy-config
+            secretName: {{ .Values.gateway.wgSecretName }}
         {{- end }}
       serviceAccountName: "{{ include "chart.fullname" . }}"

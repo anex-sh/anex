@@ -45,10 +45,9 @@ Target      = {{ $t.Address }}
 `
 
 type ProxyServerConfig struct {
-	Endpoint   string `yaml:"endpoint"`
-	PublicKey  string `yaml:"public_key"`
-	AllowedIPs string `yaml:"allowed_ips"`
-	DNS        string `yaml:"dns"`
+	Endpoint  string `yaml:"endpoint"`
+	PublicKey string `yaml:"public_key"`
+	DNS       string `yaml:"dns,omitempty"`
 }
 
 type ProxyClientConfig struct {

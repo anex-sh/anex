@@ -1,0 +1,42 @@
+{{- if .Values.gateway.inCluster }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ include "chart.fullname" . }}-gateway"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "{{ include "chart.fullname" . }}-gateway"
+  template:
+    metadata:
+      labels:
+        app: "{{ include "chart.fullname" . }}-gateway"
+    spec:
+      {{- if .Values.gateway.affinity }}
+      affinity:
+        {{- toYaml .Values.gateway.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.gateway.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.gateway.nodeSelector | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: virtual-kubelet
+          image: {{ .Values.gateway.image.repository }}:{{ .Values.gateway.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.gateway.image.pullPolicy }}
+          {{- if .Values.gateway.resources }}
+          resources:
+            {{- toYaml .Values.gateway.resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: proxy-config
+              mountPath: /proxy-config.yaml
+              subPath: proxy-config.yaml
+              readOnly: true
+      volumes:
+        - name: proxy-config
+          secret:
+            secretName: {{ required "Values.gateway.wgSecretName must be on-empty. Deploy pre-generated Wireguard keys as a secret and reference its name here" .Values.gateway.wgSecretName }}
+      serviceAccountName: "{{ include "chart.fullname" . }}"
+{{- end }}

@@ -9,24 +9,36 @@ virtualKubelet:
 
   resources:
     requests:
-      cpu: "100m"
-      memory: "128Mi"
+      cpu: "1"
+      memory: "1Gi"
     limits:
-      cpu: "1000m"
+      cpu: "1"
+      memory: "1Gi"
+
+  affinity: {}
+  nodeSelector: {}
+
+gateway:
+  enable: true
+  inCluster: true
+  wgSecretName: ""
+
+  image:
+    repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
+    tag: "gateway"
+    pullPolicy: Always
+
+  resources:
+    requests:
+      cpu: "0.5"
+      memory: "512Mi"
+    limits:
+      cpu: "0.5"
       memory: "512Mi"
 
   affinity: {}
-    # nodeAffinity:
-    #   requiredDuringSchedulingIgnoredDuringExecution:
-    #     nodeSelectorTerms:
-    #     - matchExpressions:
-    #       - key: kubernetes.io/hostname
-    #         operator: In
-    #         values:
-    #         - node1
-
   nodeSelector: {}
-    # kubernetes.io/hostname: node1
+
 
 # Application configuration
 appConfig:
@@ -39,6 +51,14 @@ appConfig:
     vastAI:
       apiKey: ""
 
+  virtualNode:
+    nodeName: "virtual-node"
+    podLimit: "1"
+    cpu: "1000"
+    memory: "1000Gi"
+    labels: {}
+    taints: []
+
   provisioning:
     maxRetries: 10
     startupTimeout: "10m"
@@ -48,14 +68,6 @@ appConfig:
         enable: true
         timeout: "1d"
 
-  virtualNode:
-    nodeName: "virtual-node"
-    podLimit: "1"
-    cpu: "1000"
-    memory: "1000Gi"
-    labels: {}
-    taints: []
-
   agentAuthToken: ""
 
   proxy:
@@ -64,7 +76,3 @@ appConfig:
   promtail:
     enable: false
     clients: []
-      # - url: "https://example-loki-gateway.com/loki/api/v1/push"
-      #   basicAuth:
-      #     username: "username"
-      #     password: "password"

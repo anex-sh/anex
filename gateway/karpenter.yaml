@@ -24,7 +24,7 @@ spec:
   template:
     metadata:
       labels:
-        wg/node: "true"
+        eks.glami-ml.com/node-for: "gpu-provider"
     spec:
       nodeClassRef:
         group: karpenter.k8s.aws
