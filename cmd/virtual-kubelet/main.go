@@ -77,6 +77,7 @@ func main() {
 	rootCmd.AddCommand(version.NewCommand(buildVersion, buildTime), providers.NewCommand(s))
 	preRun := rootCmd.PreRunE
 
+	// TODO: Read config at the root; fix log level
 	var logLevel string
 	rootCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if optsErr != nil {

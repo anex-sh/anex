@@ -275,8 +275,8 @@ func (c *ProviderConfig) GetStatusReportTimeout() time.Duration {
 	return duration
 }
 
-// loadConfig loads the given YAML configuration file. Node name is ignored.
-func loadConfig(providerConfig string) (config ProviderConfig, err error) {
+// LoadConfig loads the given YAML configuration file. Node name is ignored.
+func LoadConfig(providerConfig string) (config ProviderConfig, err error) {
 	data, err := os.ReadFile(providerConfig)
 	if err != nil {
 		return config, err

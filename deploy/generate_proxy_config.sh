@@ -5,13 +5,9 @@ set -euo pipefail
 print_usage() {
   cat <<'USAGE'
 Usage: generate_proxy_config.sh \
-  --gateway-endpoint HOST:PORT \
+  --gateway-endpoint HOST \
   --pod-limit NUM \
-  --dns IP \
-  --allowed-ips CIDR[,CIDR...] \
-  [--proxy-conf-out PATH] \
-  [--wg-conf-out PATH] \
-  [--iface IFACE]
+  [--proxy-conf-out PATH]
 
 Description:
   Generates two artifacts using the same freshly generated keys:
@@ -19,22 +15,15 @@ Description:
    - WireGuard server config file written to --wg-conf-out (default: ./wg0.conf).
 
 Arguments:
-  --gateway-endpoint  Public endpoint of the gateway in form HOST:PORT (required)
+  --gateway-endpoint  Public endpoint of the gateway HOST (required)
   --pod-limit         Number of peers to generate (1..128) (required)
-  --dns               DNS server IP for the server section (required)
-  --allowed-ips       Comma-separated list of CIDRs for server.allowed_ips (required)
   --proxy-conf-out    Path to write the proxy config YAML (default: proxy-conf.yaml)
-  --wg-conf-out       Path to write the WireGuard server config (default: wg0.conf)
-  --iface             Egress interface used in iptables MASQUERADE rules (default: enX0)
 
 Examples:
   ./generate_proxy_config.sh \
-    --gateway-endpoint 3.79.237.153:51820 \
-    --pod-limit 3 \
-    --dns 10.100.0.10 \
-    --allowed-ips 10.0.0.0/16,10.100.0.10/32 \
-    --proxy-conf-out wireguard-keys.yaml \
-    --wg-conf-out wg0.conf
+    --gateway-endpoint 3.81.217.153 \
+    --pod-limit 10 \
+    --proxy-conf-out wireguard-keys.yaml
 USAGE
 }
 
@@ -71,11 +60,7 @@ gen_wg_keys() {
 # Defaults / placeholders
 GATEWAY_ENDPOINT=""
 POD_LIMIT=""
-DNS_IP=""
-ALLOWED_IPS=""
 PROXY_CONF_OUT="proxy-config.yaml"
-WG_CONF_OUT="wg0.conf"
-IFACE="enX0"
 
 # Parse named arguments
 while [[ $# -gt 0 ]]; do
@@ -88,24 +73,8 @@ while [[ $# -gt 0 ]]; do
       POD_LIMIT=${2:-}
       shift 2
       ;;
-    --dns)
-      DNS_IP=${2:-}
-      shift 2
-      ;;
-    --allowed-ips)
-      ALLOWED_IPS=${2:-}
-      shift 2
-      ;;
     --proxy-conf-out)
       PROXY_CONF_OUT=${2:-}
-      shift 2
-      ;;
-    --wg-conf-out)
-      WG_CONF_OUT=${2:-}
-      shift 2
-      ;;
-    --iface)
-      IFACE=${2:-}
       shift 2
       ;;
     -h|--help)
@@ -124,8 +93,6 @@ done
 err=0
 if [[ -z "$GATEWAY_ENDPOINT" ]]; then echo "Error: --gateway-endpoint is required" >&2; err=1; fi
 if [[ -z "$POD_LIMIT" ]]; then echo "Error: --pod-limit is required" >&2; err=1; fi
-if [[ -z "$DNS_IP" ]]; then echo "Error: --dns is required" >&2; err=1; fi
-if [[ -z "$ALLOWED_IPS" ]]; then echo "Error: --allowed-ips is required" >&2; err=1; fi
 
 if [[ $err -ne 0 ]]; then
   echo >&2
@@ -155,9 +122,7 @@ SERVER_PUB="$WG_PUB"
 YAML_OUT="server:
   private_key: $SERVER_PRIV
   public_key: $SERVER_PUB
-  dns: $DNS_IP
-  endpoint: $GATEWAY_ENDPOINT
-  allowed_ips: \"10.254.254.1/32,$ALLOWED_IPS\"
+  endpoint: $GATEWAY_ENDPOINT:51820
 peers:
 "
 
@@ -194,53 +159,3 @@ done
 
 # Write YAML to proxy-conf-out first
 printf "%s" "$YAML_OUT" > "$PROXY_CONF_OUT"
-
-# Then write wg server config using the same keys
-# Extract port from endpoint (HOST:PORT)
-WG_PORT=${GATEWAY_ENDPOINT##*:}
-
-# Build iptables PostUp/PreDown rules based on allowed IPs (excluding the interface address 10.254.254.1/32)
-# Ensure 10.254.254.0/24 as source subnet
-SRC_SUBNET="10.254.254.0/24"
-
-# Filter allowed IPs list to omit 10.254.254.1/32 if present
-ALLOWED_LIST=${ALLOWED_IPS// /}
-
-postup_rules=()
-predown_rules=()
-IFS=',' read -r -a allowed_array <<< "$ALLOWED_LIST"
-for cidr in "${allowed_array[@]}"; do
-  [[ -z "$cidr" ]] && continue
-  if [[ "$cidr" == "10.254.254.1/32" ]]; then
-    continue
-  fi
-  postup_rules+=("PostUp = iptables -t nat -A POSTROUTING -s $SRC_SUBNET -d $cidr -o $IFACE -j MASQUERADE")
-  predown_rules+=("PreDown = iptables -t nat -D POSTROUTING -s $SRC_SUBNET -d $cidr -o $IFACE -j MASQUERADE")
-done
-
-{
-  echo "[Interface]"
-  echo "Address = 10.254.254.1/24"
-  echo "ListenPort = $WG_PORT"
-  echo "PrivateKey = $SERVER_PRIV"
-  echo "SaveConfig = false"
-  echo
-  echo "# Allow forwarding and NAT into VPC + (optional) EKS Service CIDR"
-  echo "PostUp = iptables -A FORWARD -i %i -j ACCEPT"
-  echo "PostUp = iptables -A FORWARD -o %i -j ACCEPT"
-  for r in "${postup_rules[@]}"; do echo "$r"; done
-  echo
-  echo "PreDown = iptables -D FORWARD -i %i -j ACCEPT"
-  echo "PreDown = iptables -D FORWARD -o %i -j ACCEPT"
-  for r in "${predown_rules[@]}"; do echo "$r"; done
-  echo
-  # Peers
-  for idx in "${!peer_pubs[@]}"; do
-    num=$((idx+1))
-    printf "\n# Peer %02d\n" "$num"
-    echo "[Peer]"
-    echo "PublicKey       = ${peer_pubs[$idx]}"
-    echo "AllowedIPs      = ${peer_addrs[$idx]}"
-    echo "PersistentKeepalive = 25"
-  done
-} > "$WG_CONF_OUT"

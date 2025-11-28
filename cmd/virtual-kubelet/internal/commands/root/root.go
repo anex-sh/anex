@@ -32,6 +32,7 @@ import (
 	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
 	"gitlab.devklarka.cz/ai/gpu-provider/cmd/virtual-kubelet/internal/provider"
 	"gitlab.devklarka.cz/ai/gpu-provider/internal/manager"
+	"gitlab.devklarka.cz/ai/gpu-provider/internal/provider/glami"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiserver/pkg/server/dynamiccertificates"
 )
@@ -57,6 +58,11 @@ This allows users to schedule kubernetes workloads on nodes that aren't running 
 func runRootCommand(ctx context.Context, s *provider.Store, c Opts) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	config, err := glami.LoadConfig(c.ProviderConfigPath)
+	if err != nil {
+		return err
+	}
 
 	if ok := provider.ValidOperatingSystems[c.OperatingSystem]; !ok {
 		return errdefs.InvalidInputf("operating system %q is not supported", c.OperatingSystem)
@@ -93,7 +99,7 @@ func runRootCommand(ctx context.Context, s *provider.Store, c Opts) error {
 		// TODO: Fix missing env var VKUBELET_POD_IP
 		initConfig := provider.InitConfig{
 			ConfigPath:        c.ProviderConfigPath,
-			NodeName:          c.NodeName,
+			NodeName:          config.VirtualNode.NodeName,
 			OperatingSystem:   c.OperatingSystem,
 			ResourceManager:   rm,
 			DaemonPort:        c.ListenPort,
@@ -116,6 +122,7 @@ func runRootCommand(ctx context.Context, s *provider.Store, c Opts) error {
 		providerWG = ps.ProvisioningWG()
 
 		p.ConfigureNode(ctx, cfg.Node)
+
 		cfg.Node.Status.NodeInfo.KubeletVersion = c.Version
 		return p, nil, nil
 	}
@@ -125,7 +132,7 @@ func runRootCommand(ctx context.Context, s *provider.Store, c Opts) error {
 		return err
 	}
 
-	cm, err := nodeutil.NewNode(c.NodeName, newProvider, func(cfg *nodeutil.NodeConfig) error {
+	cm, err := nodeutil.NewNode(config.VirtualNode.NodeName, newProvider, func(cfg *nodeutil.NodeConfig) error {
 		cfg.KubeconfigPath = c.KubeConfigPath
 		cfg.Handler = mux
 		cfg.InformerResyncPeriod = c.InformerResyncPeriod
@@ -146,7 +153,7 @@ func runRootCommand(ctx context.Context, s *provider.Store, c Opts) error {
 		return nil
 	},
 		nodeutil.WithClient(clientSet),
-		setAuth(c.NodeName, apiConfig),
+		setAuth(config.VirtualNode.NodeName, apiConfig),
 		// No access to the root CA on EKS, so we need to disable TLS
 		// nodeutil.WithTLSConfig(
 		//	 nodeutil.WithKeyPairFromPath(apiConfig.CertPath, apiConfig.KeyPath),
@@ -165,7 +172,7 @@ func runRootCommand(ctx context.Context, s *provider.Store, c Opts) error {
 	ctx = log.WithLogger(ctx, log.G(ctx).WithFields(log.Fields{
 		"provider":         c.Provider,
 		"operatingSystem":  c.OperatingSystem,
-		"node":             c.NodeName,
+		"node":             config.VirtualNode.NodeName,
 		"watchedNamespace": c.KubeNamespace,
 	}))
 

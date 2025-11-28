@@ -3,6 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: "{{ include "chart.fullname" . }}-gateway"
+  namespace: {{ .Values.namespace }}
 spec:
   replicas: 1
   selector:
@@ -21,17 +22,31 @@ spec:
       nodeSelector:
         {{- toYaml .Values.gateway.nodeSelector | nindent 8 }}
       {{- end }}
+      {{- if .Values.gateway.tolerations }}
+      tolerations:
+        {{- toYaml .Values.gateway.tolerations | nindent 8 }}
+      {{- end }}
       containers:
         - name: virtual-kubelet
           image: {{ .Values.gateway.image.repository }}:{{ .Values.gateway.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.gateway.image.pullPolicy }}
+          ports:
+            - name: wg
+              containerPort: 51820
+              protocol: UDP
+            - name: hc
+              containerPort: 9000
+              protocol: TCP
+          securityContext:
+            capabilities:
+              add: [ "NET_ADMIN" ]
           {{- if .Values.gateway.resources }}
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
           {{- end }}
           volumeMounts:
             - name: proxy-config
-              mountPath: /proxy-config.yaml
+              mountPath: /etc/wireguard/proxy.yaml
               subPath: proxy-config.yaml
               readOnly: true
       volumes:

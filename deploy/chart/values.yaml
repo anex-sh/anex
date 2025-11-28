@@ -1,3 +1,6 @@
+# Namespace configuration
+namespace: "gpu-provider"
+
 # Deployment-specific configuration
 virtualKubelet:
   image:
@@ -22,6 +25,7 @@ gateway:
   enable: true
   inCluster: true
   wgSecretName: ""
+  hostname: ""
 
   image:
     repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
@@ -38,7 +42,7 @@ gateway:
 
   affinity: {}
   nodeSelector: {}
-
+  tolerations: []
 
 # Application configuration
 appConfig:

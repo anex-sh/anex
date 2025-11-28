@@ -63,7 +63,7 @@ func newCoreV1Recorder(client kubernetes.Interface, scheme *runtime.Scheme, comp
 }
 
 func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP string, daemonEndpointPort int32) (*Provider, error) {
-	config, err := loadConfig(providerConfig)
+	config, err := LoadConfig(providerConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -242,6 +242,10 @@ func addAttributes(ctx context.Context, span trace.Span, attrs ...string) contex
 
 func (p *Provider) ProvisioningWG() *sync.WaitGroup {
 	return &p.provisioningWG
+}
+
+func (p *Provider) NodeName() string {
+	return p.nodeName
 }
 
 func (p *Provider) getProxyConfigForVirtualPod() (int, *virtualpod.ProxyClientConfig, error) {

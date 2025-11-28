@@ -1,17 +1,17 @@
 apiVersion: karpenter.k8s.aws/v1
 kind: EC2NodeClass
 metadata:
-  name: wg-al2023
+  name: gpu-provider
 spec:
   amiSelectorTerms:
     - alias: al2023@v20250610
   subnetSelectorTerms:
     - tags:
-        karpenter.sh/discovery: "eks-clusters"
+        karpenter.sh/discovery: "merlin-all--eks-cluster"
   securityGroupSelectorTerms:
     - tags:
-        karpenter.sh/discovery: "eks-cluster-rex-dev"
-  role: "KarpenterNodeRole-rex-dev--eks-cluster"
+        karpenter.sh/discovery: "merlin-dev--eks-cluster"
+  role: "KarpenterNodeRole-merlin-dev--eks-cluster"
   tags:
     ManagedBy: Skarupa
   detailedMonitoring: false
@@ -19,7 +19,7 @@ spec:
 apiVersion: karpenter.sh/v1
 kind: NodePool
 metadata:
-  name: wg-pool
+  name: gpu-provider
 spec:
   template:
     metadata:
@@ -29,9 +29,9 @@ spec:
       nodeClassRef:
         group: karpenter.k8s.aws
         kind: EC2NodeClass
-        name: wg-al2023
+        name: gpu-provider
       taints:
-        - key: wg/only
+        - key: "gpu-provider.glami.cz/gpu-provider"
           value: "true"
           effect: NoSchedule
       requirements:

@@ -1,14 +1,14 @@
 [Interface]
 PrivateKey = {{ (ds "config").server.private_key }}
-ListenPort = {{ index ((ds "config").server.endpoint | strings.Split ":") 1 }}
+ListenPort = 51820
 
-PostUp = IF=$(ip route show default | awk '{print $5}') iptables -A FORWARD -i wg0 -o "$IF" -m conntrack --ctstate NEW,ESTABLISHED,RELATED -j ACCEPT
-PostUp = IF=$(ip route show default | awk '{print $5}') iptables -A FORWARD -o wg0 -j ACCEPT
-PostUp = IF=$(ip route show default | awk '{print $5}') iptables -t nat -A POSTROUTING -s 10.254.254.0/24 -o $IF -j MASQUERADE
+PostUp = iptables -A FORWARD -i wg0 -o "$IF" -m conntrack --ctstate NEW,ESTABLISHED,RELATED -j ACCEPT
+PostUp = iptables -A FORWARD -o wg0 -j ACCEPT
+PostUp = iptables -t nat -A POSTROUTING -s 10.254.254.0/24 -o $IF -j MASQUERADE
 
-PreDown = IF=$(ip route show default | awk '{print $5}') iptables -D FORWARD -i wg0 -o "$IF" -m conntrack --ctstate NEW,ESTABLISHED,RELATED -j ACCEPT
-PreDown = IF=$(ip route show default | awk '{print $5}') iptables -D FORWARD -o wg0 -j ACCEPT
-PreDown = IF=$(ip route show default | awk '{print $5}') iptables -t nat -D POSTROUTING -s 10.254.254.0/24 -o $IF -j MASQUERADE
+PreDown = iptables -D FORWARD -i wg0 -o "$IF" -m conntrack --ctstate NEW,ESTABLISHED,RELATED -j ACCEPT
+PreDown = iptables -D FORWARD -o wg0 -j ACCEPT
+PreDown = iptables -t nat -D POSTROUTING -s 10.254.254.0/24 -o $IF -j MASQUERADE
 
 {{ range $peer := (ds "config").peers }}
 [Peer]

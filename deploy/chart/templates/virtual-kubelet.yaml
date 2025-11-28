@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: "{{ include "chart.fullname" . }}-virtual-kubelet"
+  namespace: {{ .Values.namespace }}
 spec:
   replicas: 1
   selector:
@@ -19,6 +20,10 @@ spec:
       {{- if .Values.virtualKubelet.nodeSelector }}
       nodeSelector:
         {{- toYaml .Values.virtualKubelet.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.gateway.tolerations }}
+      tolerations:
+        {{- toYaml .Values.gateway.tolerations | nindent 8 }}
       {{- end }}
       containers:
         - name: virtual-kubelet
