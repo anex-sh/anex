@@ -13,37 +13,33 @@ spec:
       labels:
         app: "{{ include "chart.fullname" . }}-virtual-kubelet"
     spec:
-      {{- if .Values.virtualKubelet.affinity }}
+      {{- if .Values.deployment.affinity }}
       affinity:
-        {{- toYaml .Values.virtualKubelet.affinity | nindent 8 }}
+        {{- toYaml .Values.deployment.affinity | nindent 8 }}
       {{- end }}
-      {{- if .Values.virtualKubelet.nodeSelector }}
+      {{- if .Values.deployment.nodeSelector }}
       nodeSelector:
-        {{- toYaml .Values.virtualKubelet.nodeSelector | nindent 8 }}
-      {{- end }}
-      {{- if .Values.gateway.tolerations }}
-      tolerations:
-        {{- toYaml .Values.gateway.tolerations | nindent 8 }}
+        {{- toYaml .Values.deployment.nodeSelector | nindent 8 }}
       {{- end }}
       containers:
         - name: virtual-kubelet
-          image: {{ .Values.virtualKubelet.image.repository }}:{{ .Values.virtualKubelet.image.tag | default .Chart.AppVersion }}
-          imagePullPolicy: {{ .Values.virtualKubelet.image.pullPolicy }}
+          image: {{ .Values.deployment.containers.virtualKubelet.image.repository }}:{{ .Values.deployment.containers.virtualKubelet.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.deployment.containers.virtualKubelet.image.pullPolicy }}
           # command: ['sleep', '3600']
           args:
             - --provider-config=/virtual-kubelet-config.yaml
-          {{- if .Values.virtualKubelet.resources }}
+          {{- if .Values.deployment.containers.virtualKubelet.resources }}
           resources:
-            {{- toYaml .Values.virtualKubelet.resources | nindent 12 }}
+            {{- toYaml .Values.deployment.containers.virtualKubelet.resources | nindent 12 }}
           {{- end }}
           env:
             - name: VIRTUAL_NODE_PODS
               value: "100"
-            {{- if .Values.gateway.enable }}
+            {{- if .Values.deployment.gateway.enable }}
             - name: PROXY_CONFIG_PATH
               value: "/proxy-config.yaml"
             {{- end }}
-            {{- if .Values.gateway.enable }}
+            {{- if .Values.deployment.gateway.enable }}
             - name: PROXY_ENABLE
               value: "true"
             {{- end }}
@@ -58,7 +54,7 @@ spec:
               mountPath: /virtual-kubelet-config.yaml
               subPath: virtual-kubelet-config.yaml
               readOnly: true
-          {{- if .Values.gateway.enable }}
+          {{- if .Values.deployment.gateway.enable }}
             - name: proxy-config
               mountPath: /proxy-config.yaml
               subPath: proxy-config.yaml
@@ -68,9 +64,9 @@ spec:
         - name: vk-config
           configMap:
             name: "{{ include "chart.fullname" . }}-virtual-kubelet-config"
-        {{- if .Values.gateway.enable }}
+        {{- if .Values.deployment.gateway.enable }}
         - name: proxy-config
           secret:
-            secretName: {{ .Values.gateway.wgSecretName }}
+            secretName: {{ .Values.deployment.gateway.wgSecretName }}
         {{- end }}
       serviceAccountName: "{{ include "chart.fullname" . }}"

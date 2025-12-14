@@ -28,8 +28,9 @@ deployment:
     enable: true
     AWSLoadBalancerController: false
     wgSecretName: ""
-    endpoint: ""
+    domain: ""
     port: 51820
+    nodePort: 31311
 
     image:
       repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"

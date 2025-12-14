@@ -13,36 +13,26 @@ spec:
       labels:
         app: "{{ include "chart.fullname" . }}-gateway"
     spec:
-      {{- if .Values.gateway.affinity }}
-      affinity:
-        {{- toYaml .Values.gateway.affinity | nindent 8 }}
-      {{- end }}
-      {{- if .Values.gateway.nodeSelector }}
-      nodeSelector:
-        {{- toYaml .Values.gateway.nodeSelector | nindent 8 }}
-      {{- end }}
-      {{- if .Values.gateway.tolerations }}
-      tolerations:
-        {{- toYaml .Values.gateway.tolerations | nindent 8 }}
-      {{- end }}
       containers:
         - name: virtual-kubelet
-          image: {{ .Values.gateway.image.repository }}:{{ .Values.gateway.image.tag | default .Chart.AppVersion }}
-          imagePullPolicy: {{ .Values.gateway.image.pullPolicy }}
+          image: {{ .Values.deployment.gateway.image.repository }}:{{ .Values.deployment.gateway.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.deployment.gateway.image.pullPolicy }}
           ports:
             - name: wg
               containerPort: 51820
               protocol: UDP
             - name: hc
               containerPort: 9000
-              hostPort: 9000
+              {{- if not .Values.deployment.gateway.AWSLoadBalancerController }}
+              hostPort: {{ .Values.deployment.gateway.nodePort }}
+              {{- end }}
               protocol: TCP
           securityContext:
             capabilities:
               add: [ "NET_ADMIN" ]
-          {{- if .Values.gateway.resources }}
+          {{- if .Values.deployment.gateway.resources }}
           resources:
-            {{- toYaml .Values.gateway.resources | nindent 12 }}
+            {{- toYaml .Values.deployment.gateway.resources | nindent 12 }}
           {{- end }}
           volumeMounts:
             - name: proxy-config
@@ -52,5 +42,5 @@ spec:
       volumes:
         - name: proxy-config
           secret:
-            secretName: {{ required "Values.gateway.wgSecretName must be on-empty. Deploy pre-generated Wireguard keys as a secret and reference its name here" .Values.gateway.wgSecretName }}
+            secretName: {{ required "Values.deployment.gateway.wgSecretName must be on-empty. Deploy pre-generated Wireguard keys as a secret and reference its name here" .Values.deployment.gateway.wgSecretName }}
       serviceAccountName: "{{ include "chart.fullname" . }}"

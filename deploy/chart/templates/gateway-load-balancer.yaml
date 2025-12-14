@@ -10,7 +10,9 @@ metadata:
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "TCP"
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "9000"
     service.beta.kubernetes.io/aws-load-balancer-ip-address-type: "ipv4"
-    external-dns.alpha.kubernetes.io/hostname: "{{ .Values.gateway.hostname }}"
+    {{- if .Values.deployment.gateway.domain }}
+    external-dns.alpha.kubernetes.io/hostname: "{{ .Values.deployment.gateway.domain }}"
+    {{- end }}
 spec:
   type: LoadBalancer
   {{- if .Values.deployment.gateway.AWSLoadBalancerController }}
