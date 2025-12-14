@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -184,6 +186,20 @@ func getLoadBalancerIP(ctx context.Context, client *kubernetes.Clientset, ns, sv
 	return "", fmt.Errorf("no external IP/hostname found for service %s", svcName)
 }
 
+func waitForDNS(gatewayEndpoint string, attempts int) {
+	for i := 1; i <= attempts; i++ {
+		_, err := net.LookupHost(gatewayEndpoint)
+		if err == nil {
+			return
+		}
+
+		log.Printf("[%d/%d] DNS record not ready for %s: %v\n", i, attempts, gatewayEndpoint, err)
+		time.Sleep(10 * time.Second)
+	}
+
+	log.Fatalf("Load Balancer ExternalIP unreachable")
+}
+
 func main() {
 	ctx := context.Background()
 
@@ -229,6 +245,8 @@ func main() {
 			log.Printf("Using LoadBalancer endpoint: %s", gatewayEndpoint)
 		}
 	}
+
+	waitForDNS(gatewayEndpoint, 90)
 
 	// Generate your config content here:
 	configContent, err := generateWireguardConfig(
