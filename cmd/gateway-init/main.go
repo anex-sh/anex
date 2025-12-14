@@ -162,30 +162,51 @@ func getKubeConfig() (*rest.Config, error) {
 	return clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 }
 
+func getLoadBalancerIP(ctx context.Context, client *kubernetes.Clientset, ns, svcName string) (string, error) {
+	svc, err := client.CoreV1().Services(ns).Get(ctx, svcName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("get service: %w", err)
+	}
+
+	if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
+		return "", fmt.Errorf("service %s is not of type LoadBalancer", svcName)
+	}
+
+	if len(svc.Status.LoadBalancer.Ingress) > 0 {
+		if svc.Status.LoadBalancer.Ingress[0].IP != "" {
+			return svc.Status.LoadBalancer.Ingress[0].IP, nil
+		}
+		if svc.Status.LoadBalancer.Ingress[0].Hostname != "" {
+			return svc.Status.LoadBalancer.Ingress[0].Hostname, nil
+		}
+	}
+
+	return "", fmt.Errorf("no external IP/hostname found for service %s", svcName)
+}
+
 func main() {
 	ctx := context.Background()
 
-	// Generate your config content here:
-	configContent, err := generateWireguardConfig(
-		"myaddress",
-		51820,
-		3,
-	)
-	if err != nil {
-		panic(err)
+	ns := mustEnv("POD_NAMESPACE")
+	ownerKind := mustEnv("OWNER_KIND")  // e.g. "Deployment"
+	ownerName := mustEnv("OWNER_NAME")  // e.g. "myapp"
+	cmName := mustEnv("CONFIGMAP_NAME") // e.g. "myapp-generated-config"
+	gatewayEndpoint := os.Getenv("GATEWAY_ENDPOINT")
+	gatewaySvcName := os.Getenv("GATEWAY_SERVICE_NAME")
+
+	gatewayPort := 51820
+	if portStr := os.Getenv("GATEWAY_PORT"); portStr != "" {
+		if p, err := fmt.Sscanf(portStr, "%d", &gatewayPort); err != nil || p != 1 {
+			log.Fatalf("invalid GATEWAY_PORT: %s", portStr)
+		}
 	}
 
-	fmt.Println(configContent)
-
-	//ns := mustEnv("POD_NAMESPACE")
-	//ownerKind := mustEnv("OWNER_KIND")  // e.g. "Deployment"
-	//ownerName := mustEnv("OWNER_NAME")  // e.g. "myapp"
-	//cmName := mustEnv("CONFIGMAP_NAME") // e.g. "myapp-generated-config"
-
-	ns := "skarupa-exp"
-	ownerKind := "Deployment"
-	ownerName := "test"
-	cmName := "myapp-generated-config"
+	peerCount := 128
+	//if peerStr := os.Getenv("PEER_COUNT"); peerStr != "" {
+	//	if p, err := fmt.Sscanf(peerStr, "%d", &peerCount); err != nil || p != 1 {
+	//		log.Fatalf("invalid PEER_COUNT: %s", peerStr)
+	//	}
+	//}
 
 	cfg, err := getKubeConfig()
 	if err != nil {
@@ -196,6 +217,30 @@ func main() {
 	if err != nil {
 		log.Fatalf("client: %v", err)
 	}
+
+	// If gatewayEndpoint is not provided, try to get it from the LoadBalancer service
+	if gatewayEndpoint == "" && gatewaySvcName != "" {
+		log.Printf("GATEWAY_ENDPOINT not set, fetching from service %s...", gatewaySvcName)
+		gatewayEndpoint, err = getLoadBalancerIP(ctx, client, ns, gatewaySvcName)
+		if err != nil {
+			log.Printf("Warning: could not get LoadBalancer IP: %v", err)
+			log.Printf("Using empty gatewayEndpoint - you may need to update the ConfigMap manually")
+		} else {
+			log.Printf("Using LoadBalancer endpoint: %s", gatewayEndpoint)
+		}
+	}
+
+	// Generate your config content here:
+	configContent, err := generateWireguardConfig(
+		gatewayEndpoint,
+		gatewayPort,
+		peerCount,
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(configContent)
 
 	ownerRef, err := findOwnerRef(ctx, client, ns, ownerKind, ownerName)
 	if err != nil {

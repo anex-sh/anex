@@ -21,7 +21,7 @@ spec:
   externalTrafficPolicy: Cluster
   {{- end }}
   selector:
-    app: "{{ include "chart.fullname" . }}-gateway"
+    app: "{{ include "chart.fullname" . }}"
   ports:
     - name: wg
       port: 51820

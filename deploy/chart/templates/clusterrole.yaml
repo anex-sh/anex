@@ -35,5 +35,15 @@ rules:
     verbs: ["get","create","patch","update"]
 
   - apiGroups: [""]
-    resources: ["configmaps","secrets","serviceaccounts"]
+    resources: ["secrets","serviceaccounts"]
     verbs: ["get","list","watch"]
+
+  # Allow init container to create/update ConfigMaps
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get","list","watch","create","update","patch"]
+
+  # Allow init container to get Deployment for OwnerReference
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get","list"]

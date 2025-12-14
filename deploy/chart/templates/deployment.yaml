@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ include "chart.fullname" . }}"
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "{{ include "chart.fullname" . }}"
+  template:
+    metadata:
+      labels:
+        app: "{{ include "chart.fullname" . }}"
+    spec:
+      {{- if .Values.deployment.affinity }}
+      affinity:
+        {{- toYaml .Values.deployment.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.deployment.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.deployment.nodeSelector | nindent 8 }}
+      {{- end }}
+      serviceAccountName: "{{ include "chart.fullname" . }}"
+      
+      initContainers:
+        {{- if .Values.deployment.gateway.enable }}
+        - name: gateway-init
+          image: {{ .Values.deployment.gateway.image.repository }}:{{ .Values.deployment.gateway.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.deployment.gateway.image.pullPolicy }}
+          command: ["/gateway-init"]
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OWNER_KIND
+              value: "Deployment"
+            - name: OWNER_NAME
+              value: "{{ include "chart.fullname" . }}"
+            - name: CONFIGMAP_NAME
+              value: "{{ include "chart.fullname" . }}-wg-config"
+            - name: GATEWAY_ENDPOINT
+              {{- if .Values.deployment.gateway.domain }}
+              value: "{{ .Values.deployment.gateway.domain }}"
+              {{- else }}
+              value: ""
+              {{- end }}
+            - name: GATEWAY_SERVICE_NAME
+              value: "{{ include "chart.fullname" . }}-gateway"
+            - name: GATEWAY_PORT
+              value: "{{ .Values.deployment.gateway.port }}"
+            - name: PEER_COUNT
+              value: "{{ .Values.podLimit }}"
+        {{- end }}
+
+      containers:
+        - name: virtual-kubelet
+          image: {{ .Values.deployment.containers.virtualKubelet.image.repository }}:{{ .Values.deployment.containers.virtualKubelet.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.deployment.containers.virtualKubelet.image.pullPolicy }}
+          startupProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -ec
+                - getent hosts "$WG_HOST" >/dev/null 2>&1
+            periodSeconds: 10
+            failureThreshold: 600
+          args:
+            - --provider-config=/virtual-kubelet-config.yaml
+          {{- if .Values.deployment.containers.virtualKubelet.resources }}
+          resources:
+            {{- toYaml .Values.deployment.containers.virtualKubelet.resources | nindent 12 }}
+          {{- end }}
+          env:
+            - name: VIRTUAL_NODE_PODS
+              value: "100"
+            {{- if .Values.deployment.gateway.enable }}
+            - name: PROXY_CONFIG_PATH
+              value: "/proxy-config.yaml"
+            - name: PROXY_ENABLE
+              value: "true"
+            {{- end }}
+            - name: VKUBELET_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: BANS_OVERWRITE
+              value: '{"23779":"2025-11-04T10:45:36.205086888+01:00","34425":"2025-11-04T10:45:36.205086888+01:00"}'
+          volumeMounts:
+            - name: vk-config
+              mountPath: /virtual-kubelet-config.yaml
+              subPath: virtual-kubelet-config.yaml
+              readOnly: true
+            {{- if .Values.deployment.gateway.enable }}
+            - name: wg-config
+              mountPath: /proxy-config.yaml
+              subPath: config.yaml
+              readOnly: true
+            {{- end }}
+
+        {{- if .Values.deployment.gateway.enable }}
+        - name: gateway
+          image: {{ .Values.deployment.gateway.image.repository }}:{{ .Values.deployment.gateway.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.deployment.gateway.image.pullPolicy }}
+          ports:
+            - name: wg
+              containerPort: {{ .Values.deployment.gateway.port }}
+              protocol: UDP
+            - name: hc
+              containerPort: 9000
+              {{- if not .Values.deployment.gateway.AWSLoadBalancerController }}
+              hostPort: {{ .Values.deployment.gateway.nodePort }}
+              {{- end }}
+              protocol: TCP
+          securityContext:
+            capabilities:
+              add: [ "NET_ADMIN" ]
+          {{- if .Values.deployment.gateway.resources }}
+          resources:
+            {{- toYaml .Values.deployment.gateway.resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: wg-config
+              mountPath: /etc/wireguard/proxy.yaml
+              subPath: config.yaml
+              readOnly: true
+        {{- end }}
+
+      volumes:
+        - name: vk-config
+          configMap:
+            name: "{{ include "chart.fullname" . }}-virtual-kubelet-config"
+        {{- if .Values.deployment.gateway.enable }}
+        - name: wg-config
+          configMap:
+            name: "{{ include "chart.fullname" . }}-wg-config"
+        {{- end }}

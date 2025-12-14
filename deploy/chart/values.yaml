@@ -1,6 +1,6 @@
 # Namespace configuration
 namespace: "gpu-provider"
-podLimit: 10
+podLimit: 20
 
 deployment:
   affinity: {}
