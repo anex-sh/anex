@@ -1,48 +1,49 @@
 # Namespace configuration
 namespace: "gpu-provider"
+podLimit: 10
 
-# Deployment-specific configuration
-virtualKubelet:
-  image:
-    repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
-    pullPolicy: Always
+deployment:
+  affinity: {}
+  nodeSelector: {}
 
   serviceAccount:
     annotations: {}
 
-  resources:
-    requests:
-      cpu: "1"
-      memory: "1Gi"
-    limits:
-      cpu: "1"
-      memory: "1Gi"
+  containers:
+    virtualKubelet:
+      image:
+        repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
+        tag: latest
+        pullPolicy: Always
 
-  affinity: {}
-  nodeSelector: {}
+      resources:
+        requests:
+          cpu: "1"
+          memory: "1Gi"
+        limits:
+          cpu: "1"
+          memory: "1Gi"
 
-gateway:
-  enable: true
-  inCluster: true
-  wgSecretName: ""
-  hostname: ""
+  gateway:
+    enable: true
+    AWSLoadBalancerController: false
+    wgSecretName: ""
+    endpoint: ""
+    port: 51820
 
-  image:
-    repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
-    tag: "gateway"
-    pullPolicy: Always
+    image:
+      repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
+      tag: "gateway"
+      pullPolicy: Always
 
-  resources:
-    requests:
-      cpu: "0.5"
-      memory: "512Mi"
-    limits:
-      cpu: "0.5"
-      memory: "512Mi"
+    resources:
+      requests:
+        cpu: "0.5"
+        memory: "512Mi"
+      limits:
+        cpu: "0.5"
+        memory: "512Mi"
 
-  affinity: {}
-  nodeSelector: {}
-  tolerations: []
 
 # Application configuration
 appConfig:

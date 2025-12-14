@@ -1,4 +1,3 @@
-{{- if .Values.gateway.inCluster }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -36,6 +35,7 @@ spec:
               protocol: UDP
             - name: hc
               containerPort: 9000
+              hostPort: 9000
               protocol: TCP
           securityContext:
             capabilities:
@@ -54,4 +54,3 @@ spec:
           secret:
             secretName: {{ required "Values.gateway.wgSecretName must be on-empty. Deploy pre-generated Wireguard keys as a secret and reference its name here" .Values.gateway.wgSecretName }}
       serviceAccountName: "{{ include "chart.fullname" . }}"
-{{- end }}

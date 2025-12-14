@@ -13,9 +13,11 @@ metadata:
     external-dns.alpha.kubernetes.io/hostname: "{{ .Values.gateway.hostname }}"
 spec:
   type: LoadBalancer
+  {{- if .Values.deployment.gateway.AWSLoadBalancerController }}
   loadBalancerClass: service.k8s.aws/nlb
   allocateLoadBalancerNodePorts: false
   externalTrafficPolicy: Cluster
+  {{- end }}
   selector:
     app: "{{ include "chart.fullname" . }}-gateway"
   ports:
@@ -23,7 +25,9 @@ spec:
       port: 51820
       targetPort: 51820
       protocol: UDP
+    {{- if .Values.deployment.gateway.AWSLoadBalancerController }}
     - name: hc
       port: 9000
       targetPort: 9000
       protocol: TCP
+    {{- end }}

@@ -14,5 +14,6 @@ RUN curl -L https://github.com/hairyhenderson/gomplate/releases/latest/download/
 
 COPY wg0.conf.tmpl /etc/wireguard/wg0.conf.tmpl
 COPY gateway.sh /gateway.sh
+COPY ../bin/gateway_init /gateway-init
 
 CMD [ "/gateway.sh" ]
