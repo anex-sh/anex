@@ -1,5 +1,4 @@
-# Namespace configuration
-namespace: "gpu-provider"
+# Pod limit configuration
 podLimit: 20
 
 deployment:
@@ -27,7 +26,6 @@ deployment:
   gateway:
     enable: true
     AWSLoadBalancerController: false
-    wgSecretName: ""
     domain: ""
     port: 51820
     nodePort: 31311

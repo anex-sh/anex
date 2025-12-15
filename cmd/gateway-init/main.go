@@ -204,9 +204,9 @@ func main() {
 	ctx := context.Background()
 
 	ns := mustEnv("POD_NAMESPACE")
-	ownerKind := mustEnv("OWNER_KIND")  // e.g. "Deployment"
-	ownerName := mustEnv("OWNER_NAME")  // e.g. "myapp"
-	cmName := mustEnv("CONFIGMAP_NAME") // e.g. "myapp-generated-config"
+	ownerKind := mustEnv("OWNER_KIND")
+	ownerName := mustEnv("OWNER_NAME")
+	cmName := mustEnv("CONFIGMAP_NAME")
 	gatewayEndpoint := os.Getenv("GATEWAY_ENDPOINT")
 	gatewaySvcName := os.Getenv("GATEWAY_SERVICE_NAME")
 
@@ -216,13 +216,6 @@ func main() {
 			log.Fatalf("invalid GATEWAY_PORT: %s", portStr)
 		}
 	}
-
-	peerCount := 128
-	//if peerStr := os.Getenv("PEER_COUNT"); peerStr != "" {
-	//	if p, err := fmt.Sscanf(peerStr, "%d", &peerCount); err != nil || p != 1 {
-	//		log.Fatalf("invalid PEER_COUNT: %s", peerStr)
-	//	}
-	//}
 
 	cfg, err := getKubeConfig()
 	if err != nil {
@@ -249,6 +242,7 @@ func main() {
 	waitForDNS(gatewayEndpoint, 90)
 
 	// Generate your config content here:
+	peerCount := 128
 	configContent, err := generateWireguardConfig(
 		gatewayEndpoint,
 		gatewayPort,
@@ -258,7 +252,7 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println(configContent)
+	// fmt.Println(configContent)
 
 	ownerRef, err := findOwnerRef(ctx, client, ns, ownerKind, ownerName)
 	if err != nil {

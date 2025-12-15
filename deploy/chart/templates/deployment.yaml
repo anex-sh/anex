@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: "{{ include "chart.fullname" . }}"
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
 spec:
   replicas: 1
   selector:
@@ -22,9 +22,9 @@ spec:
         {{- toYaml .Values.deployment.nodeSelector | nindent 8 }}
       {{- end }}
       serviceAccountName: "{{ include "chart.fullname" . }}"
-      
+
+      {{- if .Values.deployment.gateway.enable }}
       initContainers:
-        {{- if .Values.deployment.gateway.enable }}
         - name: gateway-init
           image: {{ .Values.deployment.gateway.image.repository }}:{{ .Values.deployment.gateway.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.deployment.gateway.image.pullPolicy }}
@@ -39,33 +39,21 @@ spec:
             - name: OWNER_NAME
               value: "{{ include "chart.fullname" . }}"
             - name: CONFIGMAP_NAME
-              value: "{{ include "chart.fullname" . }}-wg-config"
+              value: "{{ include "chart.fullname" . }}-gateway-config"
+            {{- if .Values.deployment.gateway.domain }}
             - name: GATEWAY_ENDPOINT
-              {{- if .Values.deployment.gateway.domain }}
-              value: "{{ .Values.deployment.gateway.domain }}"
-              {{- else }}
-              value: ""
-              {{- end }}
+              value: {{ .Values.deployment.gateway.domain }}
+            {{- end }}
             - name: GATEWAY_SERVICE_NAME
               value: "{{ include "chart.fullname" . }}-gateway"
             - name: GATEWAY_PORT
               value: "{{ .Values.deployment.gateway.port }}"
-            - name: PEER_COUNT
-              value: "{{ .Values.podLimit }}"
-        {{- end }}
+      {{- end }}
 
       containers:
         - name: virtual-kubelet
           image: {{ .Values.deployment.containers.virtualKubelet.image.repository }}:{{ .Values.deployment.containers.virtualKubelet.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.deployment.containers.virtualKubelet.image.pullPolicy }}
-          startupProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -ec
-                - getent hosts "$WG_HOST" >/dev/null 2>&1
-            periodSeconds: 10
-            failureThreshold: 600
           args:
             - --provider-config=/virtual-kubelet-config.yaml
           {{- if .Values.deployment.containers.virtualKubelet.resources }}
@@ -73,8 +61,6 @@ spec:
             {{- toYaml .Values.deployment.containers.virtualKubelet.resources | nindent 12 }}
           {{- end }}
           env:
-            - name: VIRTUAL_NODE_PODS
-              value: "100"
             {{- if .Values.deployment.gateway.enable }}
             - name: PROXY_CONFIG_PATH
               value: "/proxy-config.yaml"
@@ -85,15 +71,13 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
-            - name: BANS_OVERWRITE
-              value: '{"23779":"2025-11-04T10:45:36.205086888+01:00","34425":"2025-11-04T10:45:36.205086888+01:00"}'
           volumeMounts:
-            - name: vk-config
+            - name: virtual-kubelet-config
               mountPath: /virtual-kubelet-config.yaml
               subPath: virtual-kubelet-config.yaml
               readOnly: true
             {{- if .Values.deployment.gateway.enable }}
-            - name: wg-config
+            - name: gateway-config
               mountPath: /proxy-config.yaml
               subPath: config.yaml
               readOnly: true
@@ -121,18 +105,18 @@ spec:
             {{- toYaml .Values.deployment.gateway.resources | nindent 12 }}
           {{- end }}
           volumeMounts:
-            - name: wg-config
+            - name: gateway-config
               mountPath: /etc/wireguard/proxy.yaml
               subPath: config.yaml
               readOnly: true
         {{- end }}
 
       volumes:
-        - name: vk-config
+        - name: virtual-kubelet-config
           configMap:
             name: "{{ include "chart.fullname" . }}-virtual-kubelet-config"
         {{- if .Values.deployment.gateway.enable }}
-        - name: wg-config
+        - name: gateway-config
           configMap:
-            name: "{{ include "chart.fullname" . }}-wg-config"
+            name: "{{ include "chart.fullname" . }}-gateway-config"
         {{- end }}

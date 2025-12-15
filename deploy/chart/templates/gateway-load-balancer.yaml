@@ -1,14 +1,19 @@
+{{- if .Values.deployment.gateway.enable }}
 apiVersion: v1
 kind: Service
 metadata:
   name: "{{ include "chart.fullname" . }}-gateway"
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   annotations:
     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
     service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
     service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "TCP"
+    {{- if .Values.deployment.gateway.AWSLoadBalancerController }}
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "9000"
+    {{- else }}
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: {{ .Values.deployment.gateway.nodePort }}
+    {{- end }}
     service.beta.kubernetes.io/aws-load-balancer-ip-address-type: "ipv4"
     {{- if .Values.deployment.gateway.domain }}
     external-dns.alpha.kubernetes.io/hostname: {{ .Values.deployment.gateway.domain }}
@@ -33,3 +38,4 @@ spec:
       targetPort: 9000
       protocol: TCP
     {{- end }}
+{{- end }}
