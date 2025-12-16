@@ -117,6 +117,6 @@ spec:
             name: "{{ include "chart.fullname" . }}-virtual-kubelet-config"
         {{- if .Values.deployment.gateway.enable }}
         - name: gateway-config
-          configMap:
-            name: "{{ include "chart.fullname" . }}-gateway-config"
+          secret:
+            secretName: "{{ include "chart.fullname" . }}-gateway-config"
         {{- end }}

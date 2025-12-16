@@ -12,7 +12,7 @@ metadata:
     {{- if .Values.deployment.gateway.AWSLoadBalancerController }}
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "9000"
     {{- else }}
-    service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: {{ .Values.deployment.gateway.nodePort }}
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "{{ .Values.deployment.gateway.nodePort }}"
     {{- end }}
     service.beta.kubernetes.io/aws-load-balancer-ip-address-type: "ipv4"
     {{- if .Values.deployment.gateway.domain }}

@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -40,40 +41,72 @@ func findOwnerRef(ctx context.Context, client *kubernetes.Clientset, ns, kind, n
 	}
 }
 
-func upsertConfigMap(
+func upsertSecret(
 	ctx context.Context,
 	client *kubernetes.Clientset,
 	ns, name string,
 	ownerRef metav1.OwnerReference,
 	content string,
 ) error {
-	cmClient := client.CoreV1().ConfigMaps(ns)
+	secretClient := client.CoreV1().Secrets(ns)
 
-	existing, err := cmClient.Get(ctx, name, metav1.GetOptions{})
+	existing, err := secretClient.Get(ctx, name, metav1.GetOptions{})
 	if err == nil {
-		// patch / update existing
+		// Secret exists - only update ownerRef and Server.Endpoint/Port
 		existing.OwnerReferences = []metav1.OwnerReference{ownerRef}
-		if existing.Data == nil {
-			existing.Data = map[string]string{}
-		}
-		existing.Data["config.yaml"] = content
 
-		_, err = cmClient.Update(ctx, existing, metav1.UpdateOptions{})
+		// Parse the new config to get the Endpoint and Port
+		var newConfig FullConfig
+		if err := yaml.Unmarshal([]byte(content), &newConfig); err != nil {
+			return fmt.Errorf("unmarshal new config: %w", err)
+		}
+
+		// Parse the existing config
+		existingData, ok := existing.Data["config.yaml"]
+		if !ok {
+			// No existing config data, use the new content entirely
+			if existing.StringData == nil {
+				existing.StringData = map[string]string{}
+			}
+			existing.StringData["config.yaml"] = content
+		} else {
+			var existingConfig FullConfig
+			if err := yaml.Unmarshal(existingData, &existingConfig); err != nil {
+				return fmt.Errorf("unmarshal existing config: %w", err)
+			}
+
+			// Update only Endpoint and Port in the existing config
+			existingConfig.Server.Endpoint = newConfig.Server.Endpoint
+			existingConfig.Server.Port = newConfig.Server.Port
+
+			// Marshal back to YAML
+			updatedContent, err := yaml.Marshal(&existingConfig)
+			if err != nil {
+				return fmt.Errorf("marshal updated config: %w", err)
+			}
+
+			if existing.StringData == nil {
+				existing.StringData = map[string]string{}
+			}
+			existing.StringData["config.yaml"] = string(updatedContent)
+		}
+
+		_, err = secretClient.Update(ctx, existing, metav1.UpdateOptions{})
 		return err
 	}
 
 	// if not found, create new
-	cm := &corev1.ConfigMap{
+	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            name,
 			Namespace:       ns,
 			OwnerReferences: []metav1.OwnerReference{ownerRef},
 		},
-		Data: map[string]string{
+		StringData: map[string]string{
 			"config.yaml": content,
 		},
 	}
-	_, err = cmClient.Create(ctx, cm, metav1.CreateOptions{})
+	_, err = secretClient.Create(ctx, secret, metav1.CreateOptions{})
 	return err
 }
 
@@ -210,12 +243,8 @@ func main() {
 	gatewayEndpoint := os.Getenv("GATEWAY_ENDPOINT")
 	gatewaySvcName := os.Getenv("GATEWAY_SERVICE_NAME")
 
-	gatewayPort := 51820
-	if portStr := os.Getenv("GATEWAY_PORT"); portStr != "" {
-		if p, err := fmt.Sscanf(portStr, "%d", &gatewayPort); err != nil || p != 1 {
-			log.Fatalf("invalid GATEWAY_PORT: %s", portStr)
-		}
-	}
+	portStr := mustEnv("GATEWAY_PORT")
+	gatewayPort, _ := strconv.Atoi(portStr)
 
 	cfg, err := getKubeConfig()
 	if err != nil {
@@ -232,8 +261,7 @@ func main() {
 		log.Printf("GATEWAY_ENDPOINT not set, fetching from service %s...", gatewaySvcName)
 		gatewayEndpoint, err = getLoadBalancerIP(ctx, client, ns, gatewaySvcName)
 		if err != nil {
-			log.Printf("Warning: could not get LoadBalancer IP: %v", err)
-			log.Printf("Using empty gatewayEndpoint - you may need to update the ConfigMap manually")
+			log.Fatalf("Warning: could not get LoadBalancer IP: %v", err)
 		} else {
 			log.Printf("Using LoadBalancer endpoint: %s", gatewayEndpoint)
 		}
@@ -242,7 +270,7 @@ func main() {
 	waitForDNS(gatewayEndpoint, 90)
 
 	// Generate your config content here:
-	peerCount := 128
+	peerCount := 3
 	configContent, err := generateWireguardConfig(
 		gatewayEndpoint,
 		gatewayPort,
@@ -259,9 +287,9 @@ func main() {
 		log.Fatalf("find owner: %v", err)
 	}
 
-	if err := upsertConfigMap(ctx, client, ns, cmName, ownerRef, configContent); err != nil {
-		log.Fatalf("upsert configmap: %v", err)
+	if err := upsertSecret(ctx, client, ns, cmName, ownerRef, configContent); err != nil {
+		log.Fatalf("upsert secret: %v", err)
 	}
 
-	log.Printf("configmap %s updated", cmName)
+	log.Printf("secret %s updated", cmName)
 }
