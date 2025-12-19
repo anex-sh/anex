@@ -7,11 +7,11 @@ spec:
     - alias: al2023@v20250610
   subnetSelectorTerms:
     - tags:
-        karpenter.sh/discovery: "merlin-all--eks-cluster"
+        karpenter.sh/discovery: "eks-clusters"
   securityGroupSelectorTerms:
     - tags:
-        karpenter.sh/discovery: "merlin-dev--eks-cluster"
-  role: "KarpenterNodeRole-merlin-dev--eks-cluster"
+        karpenter.sh/discovery: "eks-clusters"
+  role: "KarpenterNodeRole-service-cluster-prod--eks-cluster"
   tags:
     ManagedBy: Skarupa
   detailedMonitoring: false

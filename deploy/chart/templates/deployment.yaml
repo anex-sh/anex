@@ -79,7 +79,7 @@ spec:
             {{- if .Values.deployment.gateway.enable }}
             - name: gateway-config
               mountPath: /proxy-config.yaml
-              subPath: config.yaml
+              subPath: proxy-config.yaml
               readOnly: true
             {{- end }}
 
@@ -106,10 +106,27 @@ spec:
           {{- end }}
           volumeMounts:
             - name: gateway-config
-              mountPath: /etc/wireguard/proxy.yaml
-              subPath: config.yaml
+              mountPath: /etc/wireguard/proxy-config.yaml
+              subPath: proxy-config.yaml
               readOnly: true
         {{- end }}
+
+        - name: wg-dns
+          image: coredns/coredns:1.11.1
+          args: ["-conf", "/etc/coredns/Corefile"]
+          ports:
+            - name: dns-udp
+              containerPort: 53
+              protocol: UDP
+            - name: dns-tcp
+              containerPort: 53
+              protocol: TCP
+          volumeMounts:
+            - name: wg-dns-corefile
+              mountPath: /etc/coredns
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
 
       volumes:
         - name: virtual-kubelet-config
@@ -118,5 +135,9 @@ spec:
         {{- if .Values.deployment.gateway.enable }}
         - name: gateway-config
           secret:
-            secretName: "{{ include "chart.fullname" . }}-gateway-config"
+            secretName: "gateway-config"
+        - name: wg-dns-corefile
+          configMap:
+            name: wg-dns-corefile
         {{- end }}
+{{/*            secretName: "{{ include "chart.fullname" . }}-gateway-config"*/}}
