@@ -34,12 +34,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: OWNER_KIND
-              value: "Deployment"
-            - name: OWNER_NAME
-              value: "{{ include "chart.fullname" . }}"
-            - name: CONFIGMAP_NAME
-              value: "{{ include "chart.fullname" . }}-gateway-config"
+            - name: GATEWAY_CONFIG_PATH
+              value: "/gateway/config.yaml"
             {{- if .Values.deployment.gateway.domain }}
             - name: GATEWAY_ENDPOINT
               value: {{ .Values.deployment.gateway.domain }}
@@ -48,6 +44,9 @@ spec:
               value: "{{ include "chart.fullname" . }}-gateway"
             - name: GATEWAY_PORT
               value: "{{ .Values.deployment.gateway.port }}"
+          volumeMounts:
+            - name: gateway-config
+              mountPath: /gateway
       {{- end }}
 
       containers:
@@ -63,7 +62,7 @@ spec:
           env:
             {{- if .Values.deployment.gateway.enable }}
             - name: PROXY_CONFIG_PATH
-              value: "/proxy-config.yaml"
+              value: "/gateway/config.yaml"
             - name: PROXY_ENABLE
               value: "true"
             {{- end }}
@@ -77,10 +76,9 @@ spec:
               subPath: virtual-kubelet-config.yaml
               readOnly: true
             {{- if .Values.deployment.gateway.enable }}
+          volumeMounts:
             - name: gateway-config
-              mountPath: /proxy-config.yaml
-              subPath: proxy-config.yaml
-              readOnly: true
+              mountPath: /gateway
             {{- end }}
 
         {{- if .Values.deployment.gateway.enable }}
@@ -106,9 +104,7 @@ spec:
           {{- end }}
           volumeMounts:
             - name: gateway-config
-              mountPath: /etc/wireguard/proxy-config.yaml
-              subPath: proxy-config.yaml
-              readOnly: true
+              mountPath: /gateway
         {{- end }}
 
         - name: wg-dns
@@ -134,8 +130,9 @@ spec:
             name: "{{ include "chart.fullname" . }}-virtual-kubelet-config"
         {{- if .Values.deployment.gateway.enable }}
         - name: gateway-config
-          secret:
-            secretName: "gateway-config"
+          emptyDir:
+            sizeLimit: 500Mi
+            medium: Memory
         - name: wg-dns-corefile
           configMap:
             name: wg-dns-corefile

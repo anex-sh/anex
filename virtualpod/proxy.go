@@ -86,7 +86,7 @@ func (vp *VirtualPod) generateWireproxyConfig(ctx context.Context) (string, erro
 	}
 	sort.Ints(ports)
 
-	// Proxy proxyTunnels
+	// Gateway proxyTunnels
 	var proxyTunnels ProxyTunnels
 	for _, cm := range vp.volumeMounts {
 		if cm.TargetPath == "/etc/virtualpod/proxy.conf" {

@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -21,94 +20,6 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	"gopkg.in/yaml.v3"
 )
-
-func findOwnerRef(ctx context.Context, client *kubernetes.Clientset, ns, kind, name string) (metav1.OwnerReference, error) {
-	switch kind {
-	case "Deployment":
-		d, err := client.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			return metav1.OwnerReference{}, err
-		}
-		return metav1.OwnerReference{
-			APIVersion: appsv1.SchemeGroupVersion.String(),
-			Kind:       "Deployment",
-			Name:       d.Name,
-			UID:        d.UID,
-			// Controller false is fine here; GC doesn't care.
-		}, nil
-	default:
-		return metav1.OwnerReference{}, fmt.Errorf("unsupported OWNER_KIND=%s", kind)
-	}
-}
-
-func upsertSecret(
-	ctx context.Context,
-	client *kubernetes.Clientset,
-	ns, name string,
-	ownerRef metav1.OwnerReference,
-	content string,
-) error {
-	secretClient := client.CoreV1().Secrets(ns)
-
-	existing, err := secretClient.Get(ctx, name, metav1.GetOptions{})
-	if err == nil {
-		// Secret exists - only update ownerRef and Server.Endpoint/Port
-		existing.OwnerReferences = []metav1.OwnerReference{ownerRef}
-
-		// Parse the new config to get the Endpoint and Port
-		var newConfig FullConfig
-		if err := yaml.Unmarshal([]byte(content), &newConfig); err != nil {
-			return fmt.Errorf("unmarshal new config: %w", err)
-		}
-
-		// Parse the existing config
-		existingData, ok := existing.Data["config.yaml"]
-		if !ok {
-			// No existing config data, use the new content entirely
-			if existing.StringData == nil {
-				existing.StringData = map[string]string{}
-			}
-			existing.StringData["config.yaml"] = content
-		} else {
-			var existingConfig FullConfig
-			if err := yaml.Unmarshal(existingData, &existingConfig); err != nil {
-				return fmt.Errorf("unmarshal existing config: %w", err)
-			}
-
-			// Update only Endpoint and Port in the existing config
-			existingConfig.Server.Endpoint = newConfig.Server.Endpoint
-			existingConfig.Server.Port = newConfig.Server.Port
-
-			// Marshal back to YAML
-			updatedContent, err := yaml.Marshal(&existingConfig)
-			if err != nil {
-				return fmt.Errorf("marshal updated config: %w", err)
-			}
-
-			if existing.StringData == nil {
-				existing.StringData = map[string]string{}
-			}
-			existing.StringData["config.yaml"] = string(updatedContent)
-		}
-
-		_, err = secretClient.Update(ctx, existing, metav1.UpdateOptions{})
-		return err
-	}
-
-	// if not found, create new
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            name,
-			Namespace:       ns,
-			OwnerReferences: []metav1.OwnerReference{ownerRef},
-		},
-		StringData: map[string]string{
-			"config.yaml": content,
-		},
-	}
-	_, err = secretClient.Create(ctx, secret, metav1.CreateOptions{})
-	return err
-}
 
 type PeerConfig struct {
 	Address           string `yaml:"address"`
@@ -235,29 +146,31 @@ func waitForDNS(gatewayEndpoint string, attempts int) {
 
 func main() {
 	ctx := context.Background()
+	configPath := mustEnv("GATEWAY_CONFIG_PATH")
+	if _, err := os.Stat(configPath); err == nil {
+		log.Printf("Config file already exists at %s", configPath)
+		os.Exit(0)
+	}
 
-	ns := mustEnv("POD_NAMESPACE")
-	ownerKind := mustEnv("OWNER_KIND")
-	ownerName := mustEnv("OWNER_NAME")
-	cmName := mustEnv("CONFIGMAP_NAME")
+	ns := os.Getenv("POD_NAMESPACE")
 	gatewayEndpoint := os.Getenv("GATEWAY_ENDPOINT")
 	gatewaySvcName := os.Getenv("GATEWAY_SERVICE_NAME")
 
 	portStr := mustEnv("GATEWAY_PORT")
 	gatewayPort, _ := strconv.Atoi(portStr)
 
-	cfg, err := getKubeConfig()
-	if err != nil {
-		log.Fatalf("failed to locate servicetoken or load kubeconfig: %v", err)
-	}
-
-	client, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		log.Fatalf("client: %v", err)
-	}
-
 	// If gatewayEndpoint is not provided, try to get it from the LoadBalancer service
 	if gatewayEndpoint == "" && gatewaySvcName != "" {
+		cfg, err := getKubeConfig()
+		if err != nil {
+			log.Fatalf("failed to locate servicetoken or load kubeconfig: %v", err)
+		}
+
+		client, err := kubernetes.NewForConfig(cfg)
+		if err != nil {
+			log.Fatalf("client: %v", err)
+		}
+
 		log.Printf("GATEWAY_ENDPOINT not set, fetching from service %s...", gatewaySvcName)
 		gatewayEndpoint, err = getLoadBalancerIP(ctx, client, ns, gatewaySvcName)
 		if err != nil {
@@ -277,19 +190,19 @@ func main() {
 		peerCount,
 	)
 	if err != nil {
-		panic(err)
+		log.Fatalf("generate config: %v", err)
 	}
 
-	// fmt.Println(configContent)
-
-	ownerRef, err := findOwnerRef(ctx, client, ns, ownerKind, ownerName)
-	if err != nil {
-		log.Fatalf("find owner: %v", err)
+	// Create .dirty file in the same directory
+	dirtyFile := filepath.Join(filepath.Dir(configPath), ".dirty")
+	if err := os.WriteFile(dirtyFile, []byte{}, 0644); err != nil {
+		log.Fatalf("write dirty file: %v", err)
 	}
 
-	if err := upsertSecret(ctx, client, ns, cmName, ownerRef, configContent); err != nil {
-		log.Fatalf("upsert secret: %v", err)
+	// Write config to file
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		log.Fatalf("write config file: %v", err)
 	}
 
-	log.Printf("secret %s updated", cmName)
+	log.Printf("config written to %s", configPath)
 }

@@ -81,8 +81,8 @@ type VirtualNodeConfig struct {
 	Taints   []TaintConfig     `yaml:"taints,omitempty"`
 }
 
-// ProxyConfig holds proxy configuration
-type ProxyConfig struct {
+// GatewayConfig holds proxy configuration
+type GatewayConfig struct {
 	Enable     bool   `yaml:"enable"`
 	ConfigPath string `yaml:"configPath,omitempty"`
 }
@@ -112,7 +112,7 @@ type ProviderConfig struct {
 	CloudProvider  CloudProviderConfig `yaml:"cloudProvider"`
 	Provisioning   ProvisioningConfig  `yaml:"provisioning"`
 	VirtualNode    VirtualNodeConfig   `yaml:"virtualNode"`
-	Proxy          ProxyConfig         `yaml:"proxy"`
+	Gateway        GatewayConfig       `yaml:"gateway"`
 	Promtail       PromtailConfig      `yaml:"promtail"`
 	AgentAuthToken string              `yaml:"agentAuthToken,omitempty"`
 }
@@ -193,12 +193,12 @@ func (c *ProviderConfig) overrideWithEnv() {
 		c.VirtualNode.Memory = val
 	}
 
-	// Proxy
-	if val := os.Getenv(getEnvWithPrefix("proxy", "enable")); val != "" {
-		c.Proxy.Enable = val == "true"
+	// Gateway
+	if val := os.Getenv(getEnvWithPrefix("gateway", "enable")); val != "" {
+		c.Gateway.Enable = val == "true"
 	}
-	if val := os.Getenv(getEnvWithPrefix("proxy", "configPath")); val != "" {
-		c.Proxy.ConfigPath = val
+	if val := os.Getenv(getEnvWithPrefix("gateway", "configPath")); val != "" {
+		c.Gateway.ConfigPath = val
 	}
 
 	// Promtail
@@ -356,7 +356,7 @@ func (p *Provider) loadProxyConfig() error {
 		Peers                        []*virtualpod.ProxyClientConfig `yaml:"peers"`
 	}
 
-	proxyConfigPath := p.config.Proxy.ConfigPath
+	proxyConfigPath := p.config.Gateway.ConfigPath
 	if proxyConfigPath == "" {
 		return fmt.Errorf("proxy.configPath is required when proxy is enabled")
 	}

@@ -107,7 +107,7 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 
 	ctx := context.Background()
 	// Initialize WireGuard keys and assignments if proxy is enabled
-	if config.Proxy.Enable {
+	if config.Gateway.Enable {
 		err = provider.loadProxyConfig()
 		if err != nil {
 			log.G(ctx).Errorf("failed to load wireguard keys: %v", err)
@@ -297,7 +297,7 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	var proxyConfig *virtualpod.ProxyConfig
 	var clientConfig *virtualpod.ProxyClientConfig
 
-	if p.config.Proxy.Enable {
+	if p.config.Gateway.Enable {
 		p.mutex.Lock()
 		proxyIndex, clientConfig, err = p.getProxyConfigForVirtualPod()
 		p.mutex.Unlock()
