@@ -427,4 +427,9 @@ func (c *Client) RestartMachine(ctx context.Context, id string, pullImage bool) 
 	return nil
 }
 
+func (c *Client) RenewMachineKeys(ctx context.Context, machineID string) error {
+
+	return nil
+}
+
 func (c *Client) CopyFileToMachine(ctx context.Context, id string, src, dst string) error { return nil }

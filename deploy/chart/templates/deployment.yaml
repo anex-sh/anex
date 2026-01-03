@@ -61,7 +61,7 @@ spec:
           {{- end }}
           env:
             {{- if .Values.deployment.gateway.enable }}
-            - name: PROXY_CONFIG_PATH
+            - name: GATEWAY_CONFIG_PATH
               value: "/gateway/config.yaml"
             - name: PROXY_ENABLE
               value: "true"
@@ -85,6 +85,9 @@ spec:
         - name: gateway
           image: {{ .Values.deployment.gateway.image.repository }}:{{ .Values.deployment.gateway.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.deployment.gateway.image.pullPolicy }}
+          env:
+            - name: GATEWAY_CONFIG_PATH
+              value: "/gateway/config.yaml"
           ports:
             - name: wg
               containerPort: {{ .Values.deployment.gateway.port }}

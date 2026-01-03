@@ -63,6 +63,7 @@ func newCoreV1Recorder(client kubernetes.Interface, scheme *runtime.Scheme, comp
 }
 
 func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP string, daemonEndpointPort int32) (*Provider, error) {
+	ctx := context.Background()
 	config, err := LoadConfig(providerConfig)
 	if err != nil {
 		return nil, err
@@ -105,12 +106,17 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 	// TODO: Pass hardcoded URL for binary distros
 	provider.client = vastai.NewClient("https://console.vast.ai/api/v0", config.CloudProvider.VastAI.APIKey, clusterUUID, config.VirtualNode.NodeName)
 
-	ctx := context.Background()
 	// Initialize WireGuard keys and assignments if proxy is enabled
+	wgKeysDirty := false
 	if config.Gateway.Enable {
 		err = provider.loadProxyConfig()
 		if err != nil {
 			log.G(ctx).Errorf("failed to load wireguard keys: %v", err)
+		}
+
+		dirtyFilePath := filepath.Join(filepath.Dir(config.Gateway.ConfigPath), ".dirty")
+		if _, err := os.Stat(dirtyFilePath); err == nil {
+			wgKeysDirty = true
 		}
 	}
 
@@ -173,6 +179,10 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 
 		if machine, ok := podsMachinesMapping[string(pod.UID)]; ok {
 			vp := virtualpod.NewVirtualPod(key, &pod, machine, proxyConfig, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
+			if wgKeysDirty {
+				// provider.client.RenewMachineKeys(ctx, machine.ID)
+				log.G(ctx).Info("Renewing machine keys")
+			}
 			vp.SetProvisioningCompleted(true)
 			provider.virtualPodsRestored[key] = vp
 		} else {

@@ -215,10 +215,12 @@ func (a *Agent) startWireproxy() error {
 
 // startPromtail starts the promtail agent with provided config and discards output
 func (a *Agent) startPromtail() error {
-	// If already started and alive, do nothing
+	// TODO: If already started and alive => stop
 	if a.promtailPid > 0 && isPidAlive(a.promtailPid) {
 		return nil
 	}
+
+	// TODO: Read key file and template promtail.yaml
 
 	cmd := exec.Command("/usr/bin/promtail", "-config.file=/etc/virtualpod/promtail.yaml")
 

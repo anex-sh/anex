@@ -2,13 +2,18 @@
 
 set -e
 
-if [ ! -f /etc/wireguard/proxy.yaml ]; then
-    echo "Error: /etc/wireguard/proxy.yaml not found"
+if [ -z "$GATEWAY_CONFIG_PATH" ]; then
+    echo "Error: GATEWAY_CONFIG_PATH environment variable is not set"
+    exit 1
+fi
+
+if [ ! -f "$GATEWAY_CONFIG_PATH" ]; then
+    echo "Error: $GATEWAY_CONFIG_PATH not found"
     exit 1
 fi
 
 cd /etc/wireguard
-gomplate -d config=proxy.yaml -f wg0.conf.tmpl > wg0.conf
+gomplate -d config=$GATEWAY_CONFIG_PATH -f wg0.conf.tmpl > wg0.conf
 
 export IF=$(ip route show default | awk '{print $5}')
 wg-quick up wg0
