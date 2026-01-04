@@ -32,6 +32,20 @@ func (vp *VirtualPod) WaitForAgentReady(ctx context.Context, httpClient *retryab
 	return err
 }
 
+func (vp *VirtualPod) RestartWireproxy(ctx context.Context, httpClient *retryablehttp.Client) error {
+	logger := log.G(ctx)
+
+	vp.mutex.RLock()
+	url := vp.machine.GetAgentAddress() + "/restart_wireproxy"
+	vp.mutex.RUnlock()
+
+	logger.Infof("Waiting for agent to be ready on %s", url)
+	status, _, err := utils.MakeRequest[GenericResponse](ctx, httpClient, http.MethodGet, url, nil, nil)
+	logger.Errorf("Wait for Agent ready ended with status %d", status)
+
+	return err
+}
+
 func (vp *VirtualPod) pushFile(ctx context.Context, httpClient *retryablehttp.Client, targetPath string, data string) error {
 	logger := log.G(ctx)
 

@@ -27,6 +27,17 @@ func (a *Agent) handleStatus(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, a.containerState)
 }
 
+func (a *Agent) handleWireproxyRestart(w http.ResponseWriter, r *http.Request) {
+	if a.EnableProxy {
+		if err := a.startWireproxy(); err != nil {
+			respondJSON(w, http.StatusInternalServerError, map[string]any{"message": "failed to start wireproxy: " + err.Error()})
+			return
+		}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{"message": "ok"})
+}
+
 func (a *Agent) handleRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		respondJSON(w, http.StatusMethodNotAllowed, map[string]any{"message": "Method not allowed. Use PUT."})

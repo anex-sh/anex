@@ -76,6 +76,9 @@ func NewAgent(port int, command string) *Agent {
 	// Run endpoint to start the command on demand
 	agent.mux.HandleFunc("/run", agent.handleRun)
 
+	// Run endpoint to start the command on demand
+	agent.mux.HandleFunc("/restart_wireproxy", agent.handleWireproxyRestart)
+
 	// SIGTERM endpoint
 	agent.mux.HandleFunc("/sigterm", agent.handleSigterm)
 
@@ -169,7 +172,29 @@ func isPidAlive(pid int) bool {
 func (a *Agent) startWireproxy() error {
 	// If already started and alive, do nothing
 	if a.wirePid > 0 && isPidAlive(a.wirePid) {
-		return nil
+		if proc, err := os.FindProcess(a.wirePid); err == nil {
+			_ = proc.Kill()
+		}
+	}
+
+	// Check if wireproxy.keys exists and load environment variables
+	if keysData, err := os.ReadFile("/etc/virtualpod/wireproxy.keys"); err == nil {
+		scanner := bufio.NewScanner(strings.NewReader(string(keysData)))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			if err := os.Setenv(key, value); err != nil {
+				slog.Warn("Failed to set environment variable", "key", key, "error", err)
+			}
+		}
 	}
 
 	// 1) Render config
@@ -215,12 +240,9 @@ func (a *Agent) startWireproxy() error {
 
 // startPromtail starts the promtail agent with provided config and discards output
 func (a *Agent) startPromtail() error {
-	// TODO: If already started and alive => stop
 	if a.promtailPid > 0 && isPidAlive(a.promtailPid) {
 		return nil
 	}
-
-	// TODO: Read key file and template promtail.yaml
 
 	cmd := exec.Command("/usr/bin/promtail", "-config.file=/etc/virtualpod/promtail.yaml")
 
@@ -445,7 +467,14 @@ func (a *Agent) handleSigtermSignal() {
 func (a *Agent) Run() (string, error) {
 	slog.Debug("Running agent", "port", a.Port)
 
-	// Do not start the child process automatically. Only run HTTP server.
+	// Do not start the child process automatically. Only run HTTP server and Wireproxy.
+	slog.Info("Starting Wireproxy client")
+	if a.EnableProxy {
+		if err := a.startWireproxy(); err != nil {
+			return "", fmt.Errorf("failed to start wireproxy: %w", err)
+		}
+	}
+
 	slog.Info("Starting HTTP server", "address", a.server.Addr)
 	if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return "", fmt.Errorf("failed to start HTTP server: %w", err)

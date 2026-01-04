@@ -3,6 +3,8 @@ package vastai
 import (
 	"bytes"
 	"text/template"
+
+	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider"
 )
 
 type OnStartTemplateParams struct {
@@ -11,7 +13,7 @@ type OnStartTemplateParams struct {
 	AgentURL     string
 	WireproxyURL string
 	PromtailURL  string
-	AuthToken    string
+	ProxyConfig  cloudprovider.ProxyConfig
 }
 
 func GenerateOnStartScript(params OnStartTemplateParams) string {
@@ -32,6 +34,24 @@ set -euo pipefail
 sleep 3
 
 touch ~/.no_auto_tmux
+
+export GPU_PROVIDER_GATEWAY_CLIENT_ADDRESS={{ .ProxyConfig.ClientAddress }}
+export GPU_PROVIDER_GATEWAY_CLIENT_PK={{ .ProxyConfig.ClientPrivateKey }}
+export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT={{ .ProxyConfig.ServerEndpoint }}
+export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PK={{ .ProxyConfig.ServerPublicKey }}
+
+cat <<EOF > /etc/virtualpod/wireproxy.tpl
+[Interface]
+Address     = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_ADDRESS}" }}
+PrivateKey  = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_PK}" }}
+ListenPort  = {{ "${VAST_UDP_PORT_72000}" }}
+
+[Peer]
+PublicKey           = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PK}" }}
+Endpoint            = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT}" }}
+AllowedIPs          = 0.0.0.0/0
+PersistentKeepalive = 25
+EOF
 
 # rm -rf /etc/pip.conf
 export PIP_PROXY="http://127.0.0.1:3128"

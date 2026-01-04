@@ -10,6 +10,7 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
+	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider"
 	"gitlab.devklarka.cz/ai/gpu-provider/internal/utils"
 	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	v1 "k8s.io/api/core/v1"
@@ -161,7 +162,7 @@ func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.Machin
 	return offers, nil
 }
 
-func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, authToken string, proxy, promtail bool) (machineID string, err error) {
+func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, proxy cloudprovider.ProxyConfig, promtail bool) (machineID string, err error) {
 	logger := log.G(ctx)
 	logger.Infof("Attempting to provision machine from %d candidates", len(candidatesID))
 
@@ -184,8 +185,8 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 	promtailURL := "https://glami-gpu-provider.glami-ml.com/promtail?token=cSrYDWSRTawnkIup"
 
 	containerCommand := strings.Join(pod.Spec.Containers[0].Command, " ")
-	commandWrapper := fmt.Sprintf("/container_agent run -p 25001 -c \"%s\" --auth-token \"%s\"", containerCommand, authToken)
-	if proxy {
+	commandWrapper := fmt.Sprintf("/container_agent run -p 25001 -c \"%s\"", containerCommand)
+	if proxy.Enabled {
 		commandWrapper += " --proxy"
 	}
 
@@ -199,7 +200,7 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 		AgentURL:     agentURL,
 		WireproxyURL: wireproxyURL,
 		PromtailURL:  promtailURL,
-		AuthToken:    authToken,
+		ProxyConfig:  proxy,
 	}
 
 	var diskSize int
@@ -427,7 +428,28 @@ func (c *Client) RestartMachine(ctx context.Context, id string, pullImage bool) 
 	return nil
 }
 
-func (c *Client) RenewMachineKeys(ctx context.Context, machineID string) error {
+func (c *Client) RenewMachineKeys(ctx context.Context, machineID string, proxy cloudprovider.ProxyConfig) error {
+	logger := log.G(ctx)
+	url := fmt.Sprintf("%s/instances/command/%s", c.baseURL, machineID)
+
+	command := fmt.Sprintf("echo 'GPU_PROVIDER_GATEWAY_CLIENT_ADDRESS=%s\n' > /etc/virtualpod/wireproxy.keys;", proxy.ClientAddress)
+	command += fmt.Sprintf("echo 'GPU_PROVIDER_GATEWAY_CLIENT_PK=%s\n' >> /etc/virtualpod/wireproxy.tpl;", proxy.ClientPrivateKey)
+	command += fmt.Sprintf("echo 'GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT=%s\n' >> /etc/virtualpod/wireproxy.tpl;", proxy.ServerEndpoint)
+	command += fmt.Sprintf("echo 'GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PK=%s\n' >> /etc/virtualpod/wireproxy.tpl", proxy.ServerPublicKey)
+
+	payload := map[string]interface{}{
+		"command": command,
+	}
+
+	_, response, err := utils.MakeRequest[GenericApiResponse](ctx, c.retryClient, http.MethodPut, url, payload, c.authHeader)
+	if err != nil {
+		logger.Errorf("Failed to renew keys for machine %s: %s", machineID, err)
+		return err
+	}
+	if !response.Success {
+		logger.Errorf("Failed to renew keys for machine %s", machineID)
+		return fmt.Errorf("failed to renew keys for machine %s", machineID)
+	}
 
 	return nil
 }

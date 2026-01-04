@@ -447,7 +447,7 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, a
 			logger.Infof("Filtered out %d banned machine(s), %d candidates remaining", bannedCount, len(candidatesFiltered))
 		}
 
-		machineID, err = p.client.ProvisionMachine(ctx, candidatesFiltered, pod, authToken, p.config.Gateway.Enable, p.config.Promtail.Enable)
+		machineID, err = p.client.ProvisionMachine(ctx, candidatesFiltered, pod, p.config.Gateway.Enable, p.config.Promtail.Enable)
 		// TODO: Make some smoke tests on init; retry Unauthorized during runtime
 		//if errors.Is(err, utils.ErrBadPayload) || errors.Is(err, utils.ErrUnauthorized) {
 		//	p.metrics.podsProvisioningTotal.WithLabelValues("false", "provisioning_call_failed").Inc()

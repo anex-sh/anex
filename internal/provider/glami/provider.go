@@ -3,6 +3,7 @@ package glami
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -163,6 +164,16 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 
 	podsMachinesMapping, err := provider.client.MapRunningMachines(ctx, pods)
 
+	agentCtx, agentStartUpCancel := context.WithTimeout(ctx, provider.config.GetStartupTimeout())
+	defer agentStartUpCancel()
+
+	client := retryablehttp.NewClient()
+	client.HTTPClient.Timeout = 0
+	client.RetryWaitMin = 1 * time.Second
+	client.RetryWaitMax = 30 * time.Second
+	client.RetryMax = math.MaxInt32
+	client.Logger = nil
+
 	for _, pod := range pods.Items {
 		if pod.Status.Phase != v1.PodRunning {
 			continue
@@ -180,7 +191,9 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 		if machine, ok := podsMachinesMapping[string(pod.UID)]; ok {
 			vp := virtualpod.NewVirtualPod(key, &pod, machine, proxyConfig, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
 			if wgKeysDirty {
-				// provider.client.RenewMachineKeys(ctx, machine.ID)
+				// err = vp.PushWireproxyConfig(agentCtx, client)
+				// TODO: Renew keys; call WP restart
+
 				log.G(ctx).Info("Renewing machine keys")
 			}
 			vp.SetProvisioningCompleted(true)
