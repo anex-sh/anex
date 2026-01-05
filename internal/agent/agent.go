@@ -43,6 +43,7 @@ type Agent struct {
 	terminationMutex              sync.Mutex
 
 	// wireproxy management
+	wireDir string
 	wireCmd *exec.Cmd
 	wirePid int
 
@@ -53,7 +54,7 @@ type Agent struct {
 
 // We're using v1.ContainerState from k8s.io/api/core/v1 instead of defining our own StatusResponse struct
 
-func NewAgent(port int, command string) *Agent {
+func NewAgent(port int, command string, wireproxyDir string) *Agent {
 	agent := &Agent{
 		Command: command,
 		Port:    port,
@@ -65,6 +66,7 @@ func NewAgent(port int, command string) *Agent {
 			},
 		},
 		terminationGracePeriodSeconds: 30, // Default to 30 seconds
+		wireDir:                       wireproxyDir,
 	}
 
 	// Healthz endpoint
@@ -89,7 +91,7 @@ func NewAgent(port int, command string) *Agent {
 	addr := fmt.Sprintf("0.0.0.0:%d", agent.Port)
 	agent.server = &http.Server{
 		Addr:    addr,
-		Handler: agent.authMiddleware(agent.mux),
+		Handler: agent.mux,
 	}
 
 	return agent
@@ -198,8 +200,8 @@ func (a *Agent) startWireproxy() error {
 	}
 
 	// 1) Render config
-	const tplPath = "/etc/virtualpod/wireproxy.tpl"
-	const confPath = "/etc/virtualpod/wireproxy.conf"
+	tplPath := a.wireDir + "/wireproxy.tpl"
+	confPath := a.wireDir + "/wireproxy.conf"
 	data, err := os.ReadFile(tplPath)
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", tplPath, err)

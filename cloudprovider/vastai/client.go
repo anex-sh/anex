@@ -10,7 +10,6 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider"
 	"gitlab.devklarka.cz/ai/gpu-provider/internal/utils"
 	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	v1 "k8s.io/api/core/v1"
@@ -116,6 +115,10 @@ func (c *Client) GetMachine(ctx context.Context, machineID string) (machine *vir
 	return machine, nil
 }
 
+func (c *Client) GetAgentPort(machineID string) int {
+	return 9000
+}
+
 func sortCandidates(candidates []BundleOffer) []BundleOffer {
 	sort.Slice(candidates, func(i, j int) bool {
 		return candidates[i].DphTotal < candidates[j].DphTotal
@@ -162,7 +165,7 @@ func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.Machin
 	return offers, nil
 }
 
-func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, proxy cloudprovider.ProxyConfig, promtail bool) (machineID string, err error) {
+func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bool) (machineID string, err error) {
 	logger := log.G(ctx)
 	logger.Infof("Attempting to provision machine from %d candidates", len(candidatesID))
 
@@ -180,12 +183,12 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 	sort.Ints(ports)
 
 	// TODO: Do not hardcode URLs
-	agentURL := "https://glami-gpu-provider.glami-ml.com/container_agent_v0.1.4?token=cSrYDWSRTawnkIup"
+	agentURL := "https://glami-gpu-provider.glami-ml.com/container_agent_v0.2.0?token=cSrYDWSRTawnkIup"
 	wireproxyURL := "https://glami-gpu-provider.glami-ml.com/wireproxy?token=cSrYDWSRTawnkIup"
 	promtailURL := "https://glami-gpu-provider.glami-ml.com/promtail?token=cSrYDWSRTawnkIup"
 
 	containerCommand := strings.Join(pod.Spec.Containers[0].Command, " ")
-	commandWrapper := fmt.Sprintf("/container_agent run -p 25001 -c \"%s\"", containerCommand)
+	commandWrapper := fmt.Sprintf("/container_agent run -p 8080 -c \"%s\"", containerCommand)
 	if proxy.Enabled {
 		commandWrapper += " --proxy"
 	}
@@ -225,7 +228,6 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 		"disk":      strconv.Itoa(diskSize),
 		"runtype":   "ssh",
 		"env": map[string]string{
-			"-p 25001:25001":     "1",
 			"-p 72000:72000/udp": "1",
 		},
 	}
@@ -428,14 +430,14 @@ func (c *Client) RestartMachine(ctx context.Context, id string, pullImage bool) 
 	return nil
 }
 
-func (c *Client) RenewMachineKeys(ctx context.Context, machineID string, proxy cloudprovider.ProxyConfig) error {
+func (c *Client) RenewMachineKeys(ctx context.Context, machineID string, proxy virtualpod.PodProxyConfig) error {
 	logger := log.G(ctx)
 	url := fmt.Sprintf("%s/instances/command/%s", c.baseURL, machineID)
 
-	command := fmt.Sprintf("echo 'GPU_PROVIDER_GATEWAY_CLIENT_ADDRESS=%s\n' > /etc/virtualpod/wireproxy.keys;", proxy.ClientAddress)
-	command += fmt.Sprintf("echo 'GPU_PROVIDER_GATEWAY_CLIENT_PK=%s\n' >> /etc/virtualpod/wireproxy.tpl;", proxy.ClientPrivateKey)
-	command += fmt.Sprintf("echo 'GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT=%s\n' >> /etc/virtualpod/wireproxy.tpl;", proxy.ServerEndpoint)
-	command += fmt.Sprintf("echo 'GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PK=%s\n' >> /etc/virtualpod/wireproxy.tpl", proxy.ServerPublicKey)
+	command := fmt.Sprintf("echo 'GPU_PROVIDER_GATEWAY_CLIENT_ADDRESS=%s\n' > /etc/virtualpod/wireproxy.keys;", proxy.Client.Address)
+	command += fmt.Sprintf("echo 'GPU_PROVIDER_GATEWAY_CLIENT_PK=%s\n' >> /etc/virtualpod/wireproxy.tpl;", proxy.Client.PrivateKey)
+	command += fmt.Sprintf("echo 'GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT=%s\n' >> /etc/virtualpod/wireproxy.tpl;", proxy.Server.Endpoint)
+	command += fmt.Sprintf("echo 'GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PK=%s\n' >> /etc/virtualpod/wireproxy.tpl", proxy.Server.PublicKey)
 
 	payload := map[string]interface{}{
 		"command": command,

@@ -70,12 +70,12 @@ func (a *Agent) handleRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Start wireproxy before the main command
-	if a.EnableProxy {
-		if err := a.startWireproxy(); err != nil {
-			respondJSON(w, http.StatusInternalServerError, map[string]any{"message": "failed to start wireproxy: " + err.Error()})
-			return
-		}
-	}
+	//if a.EnableProxy {
+	//	if err := a.startWireproxy(); err != nil {
+	//		respondJSON(w, http.StatusInternalServerError, map[string]any{"message": "failed to start wireproxy: " + err.Error()})
+	//		return
+	//	}
+	//}
 
 	if err := a.startChildProcess(); err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]any{"message": "failed to start command: " + err.Error()})

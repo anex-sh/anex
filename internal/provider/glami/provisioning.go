@@ -264,7 +264,11 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			}
 		} else {
 			logger.Info("Selecting and provisioning new machine")
-			machineID, err = p.selectAndProvisionMachine(ctx, vp.Pod(), vp.AuthToken())
+			// TODO: check err
+			proxyConfig, _ := p.getPodProxyConfigById(vp.ProxySlot())
+			machineID, err = p.selectAndProvisionMachine(ctx, vp.Pod(), proxyConfig)
+			vp.SetAgentPort(p.client.GetAgentPort(machineID))
+
 			// TODO: This is wrong, pod is not failed if provisioning still in progress
 			if err != nil {
 				logger.Errorf("Failed to select and provision machine: %v", err)
@@ -302,7 +306,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 		// TODO: Change this to a proper backoff by wrapper function and callback for logging - remove network retry logging
 		// 		 Use normal http client with reasonable timeout
 		client := retryablehttp.NewClient()
-		client.HTTPClient.Timeout = 0
+		// client.HTTPClient.Timeout = 0
 		client.RetryWaitMin = 1 * time.Second
 		client.RetryWaitMax = 30 * time.Second
 		client.RetryMax = math.MaxInt32
@@ -340,7 +344,21 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 
 		if p.config.Gateway.Enable {
 			logger.Info("Pushing wireproxy config to agent")
-			err = vp.PushWireproxyConfig(agentCtx, client)
+			proxyConfig, _ := p.getPodProxyConfigById(vp.ProxySlot())
+
+			var wireproxyPort, agentPublicPort, agentLocalPort string
+			if p.config.CloudProvider.Mock {
+				// TODO: Refactor to get rid of hardcoded part
+				effectiveID, _ := strconv.Atoi(vp.ID())
+				wireproxyPort = strconv.Itoa(51900 + effectiveID)
+				agentPublicPort = strconv.Itoa(31000 + effectiveID)
+				agentLocalPort = strconv.Itoa(32000 + effectiveID)
+			} else {
+				wireproxyPort = "${VAST_UDP_PORT_72000}"
+				agentPublicPort = "9000"
+				agentLocalPort = "8080"
+			}
+			err = vp.PushWireproxyConfig(agentCtx, client, proxyConfig, wireproxyPort, agentPublicPort, agentLocalPort)
 			if err != nil {
 				logger.Errorf("Failed to push wireproxy config: %v", err)
 				p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "RuntimeInitFailed", "Failed to configure runtime environment")
@@ -400,7 +418,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 	}
 }
 
-func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, authToken string) (machineID string, err error) {
+func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, proxyConfig virtualpod.PodProxyConfig) (machineID string, err error) {
 	logger := log.G(ctx)
 	logger.Info("Selecting and provisioning machine")
 
@@ -447,7 +465,7 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, a
 			logger.Infof("Filtered out %d banned machine(s), %d candidates remaining", bannedCount, len(candidatesFiltered))
 		}
 
-		machineID, err = p.client.ProvisionMachine(ctx, candidatesFiltered, pod, p.config.Gateway.Enable, p.config.Promtail.Enable)
+		machineID, err = p.client.ProvisionMachine(ctx, candidatesFiltered, pod, proxyConfig, p.config.Promtail.Enable)
 		// TODO: Make some smoke tests on init; retry Unauthorized during runtime
 		//if errors.Is(err, utils.ErrBadPayload) || errors.Is(err, utils.ErrUnauthorized) {
 		//	p.metrics.podsProvisioningTotal.WithLabelValues("false", "provisioning_call_failed").Inc()

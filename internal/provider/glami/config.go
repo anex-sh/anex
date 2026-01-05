@@ -1,6 +1,7 @@
 package glami
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -40,6 +41,7 @@ type VastAIConfig struct {
 
 // CloudProviderConfig holds cloud provider configuration
 type CloudProviderConfig struct {
+	Mock   bool         `yaml:"mock"`
 	VastAI VastAIConfig `yaml:"vastAI"`
 }
 
@@ -282,8 +284,10 @@ func LoadConfig(providerConfig string) (config ProviderConfig, err error) {
 		return config, err
 	}
 
-	// Unmarshal YAML
-	if err = yaml.Unmarshal(data, &config); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+
+	if err := dec.Decode(&config); err != nil {
 		return config, err
 	}
 

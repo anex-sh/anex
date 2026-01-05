@@ -3,7 +3,6 @@ package glami
 import (
 	"context"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"github.com/virtual-kubelet/virtual-kubelet/trace"
 	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider"
+	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider/mock"
 	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider/vastai"
 	"gitlab.devklarka.cz/ai/gpu-provider/internal/utils"
 	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
@@ -105,7 +105,11 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 
 	// Configure cloud provider - currently only VastAI is supported
 	// TODO: Pass hardcoded URL for binary distros
-	provider.client = vastai.NewClient("https://console.vast.ai/api/v0", config.CloudProvider.VastAI.APIKey, clusterUUID, config.VirtualNode.NodeName)
+	if config.CloudProvider.Mock {
+		provider.client = mock.NewClient(clusterUUID, config.VirtualNode.NodeName)
+	} else {
+		provider.client = vastai.NewClient("https://console.vast.ai/api/v0", config.CloudProvider.VastAI.APIKey, clusterUUID, config.VirtualNode.NodeName)
+	}
 
 	// Initialize WireGuard keys and assignments if proxy is enabled
 	wgKeysDirty := false
@@ -162,17 +166,18 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 		return nil, fmt.Errorf("error listing pods: %v", err)
 	}
 
+	// TODO: Set Agent port !!!!!!!!!
 	podsMachinesMapping, err := provider.client.MapRunningMachines(ctx, pods)
 
-	agentCtx, agentStartUpCancel := context.WithTimeout(ctx, provider.config.GetStartupTimeout())
-	defer agentStartUpCancel()
-
-	client := retryablehttp.NewClient()
-	client.HTTPClient.Timeout = 0
-	client.RetryWaitMin = 1 * time.Second
-	client.RetryWaitMax = 30 * time.Second
-	client.RetryMax = math.MaxInt32
-	client.Logger = nil
+	//agentCtx, agentStartUpCancel := context.WithTimeout(ctx, provider.config.GetStartupTimeout())
+	//defer agentStartUpCancel()
+	//
+	//client := retryablehttp.NewClient()
+	//client.HTTPClient.Timeout = 0
+	//client.RetryWaitMin = 1 * time.Second
+	//client.RetryWaitMax = 30 * time.Second
+	//client.RetryMax = math.MaxInt32
+	//client.Logger = nil
 
 	for _, pod := range pods.Items {
 		if pod.Status.Phase != v1.PodRunning {
@@ -182,14 +187,14 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 		// Restore configs
 		key := buildKey(&pod)
 		proxySlotIndex, _ := strconv.Atoi(pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"])
-		clientConfig, _ := provider.getProxyConfigById(proxySlotIndex)
-		proxyConfig := &virtualpod.ProxyConfig{
-			Server: provider.serverProxySettings,
-			Client: *clientConfig,
+		if provider.clientProxySettings[proxySlotIndex].Assigned {
+			// TODO: Handle this
+			log.G(ctx).Errorf("failed to get proxy config for pod %s: %v", key, err)
 		}
+		provider.clientProxySettings[proxySlotIndex].Assigned = true
 
 		if machine, ok := podsMachinesMapping[string(pod.UID)]; ok {
-			vp := virtualpod.NewVirtualPod(key, &pod, machine, proxyConfig, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
+			vp := virtualpod.NewVirtualPod(key, &pod, machine, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
 			if wgKeysDirty {
 				// err = vp.PushWireproxyConfig(agentCtx, client)
 				// TODO: Renew keys; call WP restart
@@ -200,7 +205,7 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 			provider.virtualPodsRestored[key] = vp
 		} else {
 			if pod.Spec.RestartPolicy != v1.RestartPolicyNever {
-				vp := virtualpod.NewVirtualPod(key, &pod, &virtualpod.Machine{}, proxyConfig, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
+				vp := virtualpod.NewVirtualPod(key, &pod, &virtualpod.Machine{}, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
 				provider.virtualPodsToRestart[key] = vp
 			} else {
 				pod.Status.Phase = v1.PodFailed
@@ -271,27 +276,36 @@ func (p *Provider) NodeName() string {
 	return p.nodeName
 }
 
-func (p *Provider) getProxyConfigForVirtualPod() (int, *virtualpod.ProxyClientConfig, error) {
+func (p *Provider) reserveGatewaySlot() (int, error) {
+	if !p.config.Gateway.Enable {
+		return 0, nil
+	}
+
 	for idx, proxy := range p.clientProxySettings {
 		if proxy.Assigned {
 			continue
 		}
 
 		proxy.Assigned = true
-		return idx, proxy, nil
+		return idx, nil
 	}
 
-	return 0, nil, fmt.Errorf("no proxy keys available")
+	return 0, fmt.Errorf("no free Gateway slot available")
 }
 
-func (p *Provider) getProxyConfigById(id int) (*virtualpod.ProxyClientConfig, error) {
-	proxy := p.clientProxySettings[id]
-	if proxy.Assigned {
-		return nil, fmt.Errorf("proxy slot id=%d already assigned", id)
+func (p *Provider) getPodProxyConfigById(id int) (podProxyConfig virtualpod.PodProxyConfig, err error) {
+	clientProxy := p.clientProxySettings[id]
+	if !clientProxy.Assigned {
+		return podProxyConfig, fmt.Errorf("proxy slot id=%d not assigned", id)
 	}
 
-	proxy.Assigned = true
-	return proxy, nil
+	config := virtualpod.PodProxyConfig{
+		Enabled: true,
+		Server:  p.serverProxySettings,
+		Client:  *clientProxy,
+	}
+
+	return config, nil
 }
 
 // CreatePod accepts a pod definition and stores it in memory.
@@ -314,25 +328,14 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		return fmt.Errorf("Glami Provider does not support multiple containers")
 	}
 
-	// TODO: Refactor proxy
 	var err error
-	var proxyIndex int
-	var proxyConfig *virtualpod.ProxyConfig
-	var clientConfig *virtualpod.ProxyClientConfig
-
+	var gatewaySlotId int
 	if p.config.Gateway.Enable {
-		p.mutex.Lock()
-		proxyIndex, clientConfig, err = p.getProxyConfigForVirtualPod()
-		p.mutex.Unlock()
+		gatewaySlotId, err = p.reserveGatewaySlot()
 		if err != nil {
 			return err
 		}
-		proxyConfig = &virtualpod.ProxyConfig{
-			Server: p.serverProxySettings,
-			Client: *clientConfig,
-		}
-
-		pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"] = strconv.Itoa(proxyIndex)
+		pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"] = strconv.Itoa(gatewaySlotId)
 	}
 
 	now := metav1.NewTime(time.Now())
@@ -367,7 +370,7 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	mountPaths, _ := buildMountedConfigMaps(pod, configMaps)
 
 	key := buildKey(pod)
-	vp := virtualpod.NewVirtualPod(key, pod, &virtualpod.Machine{}, proxyConfig, proxyIndex, configMaps, mountPaths, p.config.AgentAuthToken)
+	vp := virtualpod.NewVirtualPod(key, pod, &virtualpod.Machine{}, gatewaySlotId, configMaps, mountPaths, p.config.AgentAuthToken)
 
 	createCtx, cancel := context.WithCancel(p.baseContext)
 	annotatedLogger := logger.WithFields(log.Fields{"pod.name": pod.Name, "pod.namespace": pod.Namespace})

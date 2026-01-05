@@ -1,7 +1,5 @@
 package virtualpod
 
-import "fmt"
-
 type MachineState int
 
 const (
@@ -94,8 +92,4 @@ type Machine struct {
 	AgentPort int
 	States    States
 	State     MachineState
-}
-
-func (m *Machine) GetAgentAddress() string {
-	return fmt.Sprintf("http://%s:%d", m.PublicIP, m.AgentPort)
 }

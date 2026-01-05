@@ -60,10 +60,11 @@ func NewLogger(dir, prefix string, maxSize int64, maxFiles int) (*Logger, error)
 		return nil, fmt.Errorf("failed to create log directory: %w", err)
 	}
 
+	// TODO: Check - requires too much permissions
 	// Set ownership of the log directory to the specified user and group
-	if err := setFileOwnership(dir); err != nil {
-		return nil, fmt.Errorf("failed to set ownership of log directory: %w", err)
-	}
+	//if err := setFileOwnership(dir); err != nil {
+	//	return nil, fmt.Errorf("failed to set ownership of log directory: %w", err)
+	//}
 
 	logger := &Logger{
 		dir:      dir,
@@ -101,11 +102,12 @@ func (l *Logger) openFile() error {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
 
+	// TODO: ownership - permissions
 	// Set ownership of the log file to the specified user and group
-	if err := setFileOwnership(path); err != nil {
-		file.Close()
-		return fmt.Errorf("failed to set ownership of log file: %w", err)
-	}
+	//if err := setFileOwnership(path); err != nil {
+	//	file.Close()
+	//	return fmt.Errorf("failed to set ownership of log file: %w", err)
+	//}
 
 	l.file = file
 	l.size = 0

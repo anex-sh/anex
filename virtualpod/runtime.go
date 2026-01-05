@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
@@ -20,13 +21,10 @@ type GenericResponse struct {
 func (vp *VirtualPod) WaitForAgentReady(ctx context.Context, httpClient *retryablehttp.Client) error {
 	logger := log.G(ctx)
 
-	vp.mutex.RLock()
-	url := vp.machine.GetAgentAddress() + "/healthz"
-	headers := vp.authHeaders()
-	vp.mutex.RUnlock()
-
+	time.Sleep(3 * time.Second)
+	url := vp.GetAgentAddress() + "/healthz"
 	logger.Infof("Waiting for agent to be ready on %s", url)
-	status, _, err := utils.MakeRequest[GenericResponse](ctx, httpClient, http.MethodGet, url, nil, headers)
+	status, _, err := utils.MakeRequest[GenericResponse](ctx, httpClient, http.MethodGet, url, nil, nil)
 	logger.Errorf("Wait for Agent ready ended with status %d", status)
 
 	return err
@@ -35,10 +33,7 @@ func (vp *VirtualPod) WaitForAgentReady(ctx context.Context, httpClient *retryab
 func (vp *VirtualPod) RestartWireproxy(ctx context.Context, httpClient *retryablehttp.Client) error {
 	logger := log.G(ctx)
 
-	vp.mutex.RLock()
-	url := vp.machine.GetAgentAddress() + "/restart_wireproxy"
-	vp.mutex.RUnlock()
-
+	url := vp.GetAgentAddress() + "/restart_wireproxy"
 	logger.Infof("Waiting for agent to be ready on %s", url)
 	status, _, err := utils.MakeRequest[GenericResponse](ctx, httpClient, http.MethodGet, url, nil, nil)
 	logger.Errorf("Wait for Agent ready ended with status %d", status)
@@ -49,18 +44,14 @@ func (vp *VirtualPod) RestartWireproxy(ctx context.Context, httpClient *retryabl
 func (vp *VirtualPod) pushFile(ctx context.Context, httpClient *retryablehttp.Client, targetPath string, data string) error {
 	logger := log.G(ctx)
 
-	vp.mutex.RLock()
-	url := vp.machine.GetAgentAddress() + "/push_file"
-	headers := vp.authHeaders()
-	vp.mutex.RUnlock()
-
+	url := vp.GetAgentAddress() + "/push_file"
 	type pushFileRequest struct {
 		Filepath string `json:"filepath"`
 		Data     string `json:"data"`
 	}
 
 	payload := pushFileRequest{Filepath: targetPath, Data: data}
-	status, _, err := utils.MakeRequest[GenericResponse](ctx, httpClient, http.MethodPost, url, payload, headers)
+	status, _, err := utils.MakeRequest[GenericResponse](ctx, httpClient, http.MethodPost, url, payload, nil)
 
 	if err != nil || status < 200 || status >= 300 {
 		if err != nil {
@@ -135,14 +126,16 @@ func (vp *VirtualPod) PushConfigMaps(ctx context.Context, httpClient *retryableh
 	return nil
 }
 
-func (vp *VirtualPod) PushWireproxyConfig(ctx context.Context, httpClient *retryablehttp.Client) error {
+func (vp *VirtualPod) PushWireproxyConfig(ctx context.Context, httpClient *retryablehttp.Client, proxyConfig PodProxyConfig, wireproxyPort, agentPublicPort, agentLocalPort string) error {
+	// TODO: FIX
 	targetPath := "/etc/virtualpod/wireproxy.tpl"
-	config, err := vp.generateWireproxyConfig(ctx)
+
+	data, err := vp.generateWireproxyConfig(ctx, proxyConfig, wireproxyPort, agentPublicPort, agentLocalPort)
 	if err != nil {
 		return err
 	}
 
-	return vp.pushFile(ctx, httpClient, targetPath, config)
+	return vp.pushFile(ctx, httpClient, targetPath, data)
 }
 
 func (vp *VirtualPod) PushPromtailConfig(ctx context.Context, httpClient *retryablehttp.Client, lokiConfig LokiPushGateway) error {
@@ -165,13 +158,9 @@ func (vp *VirtualPod) PushPromtailConfig(ctx context.Context, httpClient *retrya
 }
 
 func (vp *VirtualPod) RunCommand(ctx context.Context, httpClient *retryablehttp.Client) error {
-	vp.mutex.RLock()
-	url := vp.machine.GetAgentAddress() + "/run"
-	headers := vp.authHeaders()
-	vp.mutex.RUnlock()
-
+	url := vp.GetAgentAddress() + "/run"
 	logger := log.G(ctx)
-	status, _, err := utils.MakeRequest[GenericResponse](ctx, httpClient, http.MethodPut, url, nil, headers)
+	status, _, err := utils.MakeRequest[GenericResponse](ctx, httpClient, http.MethodPut, url, nil, nil)
 	logger.Infof("runCommand: %d", status)
 
 	return err

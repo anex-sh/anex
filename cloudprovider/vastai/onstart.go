@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"text/template"
 
-	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider"
+	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 )
 
 type OnStartTemplateParams struct {
@@ -13,7 +13,7 @@ type OnStartTemplateParams struct {
 	AgentURL     string
 	WireproxyURL string
 	PromtailURL  string
-	ProxyConfig  cloudprovider.ProxyConfig
+	ProxyConfig  virtualpod.PodProxyConfig
 }
 
 func GenerateOnStartScript(params OnStartTemplateParams) string {
@@ -35,11 +35,12 @@ sleep 3
 
 touch ~/.no_auto_tmux
 
-export GPU_PROVIDER_GATEWAY_CLIENT_ADDRESS={{ .ProxyConfig.ClientAddress }}
-export GPU_PROVIDER_GATEWAY_CLIENT_PK={{ .ProxyConfig.ClientPrivateKey }}
-export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT={{ .ProxyConfig.ServerEndpoint }}
-export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PK={{ .ProxyConfig.ServerPublicKey }}
+export GPU_PROVIDER_GATEWAY_CLIENT_ADDRESS={{ .ProxyConfig.Client.Address }}
+export GPU_PROVIDER_GATEWAY_CLIENT_PK={{ .ProxyConfig.Client.PrivateKey }}
+export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT={{ .ProxyConfig.Server.Endpoint }}
+export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PK={{ .ProxyConfig.Server.PublicKey }}
 
+mkdir -p /etc/virtualpod
 cat <<EOF > /etc/virtualpod/wireproxy.tpl
 [Interface]
 Address     = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_ADDRESS}" }}
@@ -51,6 +52,10 @@ PublicKey           = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PK}" }}
 Endpoint            = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT}" }}
 AllowedIPs          = 0.0.0.0/0
 PersistentKeepalive = 25
+
+[TCPServerTunnel]
+ListenPort = 9000
+Target = 127.0.0.1:8080
 EOF
 
 # rm -rf /etc/pip.conf

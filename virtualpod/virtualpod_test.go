@@ -63,7 +63,7 @@ func TestReadContainerState(t *testing.T) {
 }
 
 func TestSetConditionAddAndUpdate(t *testing.T) {
-	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &ProxyConfig{}, 0, nil, nil, "")
+	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &PodProxyConfig{}, 0, nil, nil, "")
 	// Add new condition
 	vp.setCondition(v1.PodReady, v1.ConditionTrue)
 	if len(vp.pod.Status.Conditions) != 1 {
@@ -83,7 +83,7 @@ func TestSetConditionAddAndUpdate(t *testing.T) {
 }
 
 func TestHandleContainerStartSetsReadyAndRunning(t *testing.T) {
-	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &ProxyConfig{}, 0, nil, nil, "")
+	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &PodProxyConfig{}, 0, nil, nil, "")
 	// new state Running
 	now := metav1.Now()
 	vp.handleContainerStart(v1.ContainerState{Running: &v1.ContainerStateRunning{StartedAt: now}})
@@ -113,7 +113,7 @@ func TestHandleContainerStartSetsReadyAndRunning(t *testing.T) {
 }
 
 func TestHandleContainerTerminationSetsFailedState(t *testing.T) {
-	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &ProxyConfig{}, 0, nil, nil, "")
+	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &PodProxyConfig{}, 0, nil, nil, "")
 	term := v1.ContainerState{Terminated: &v1.ContainerStateTerminated{ExitCode: 1, Reason: "Error"}}
 	vp.handleContainerTermination(term)
 	cs := vp.pod.Status.ContainerStatuses[0]
@@ -135,7 +135,7 @@ func TestHandleContainerTerminationSetsFailedState(t *testing.T) {
 }
 
 func TestPodShouldRestartPolicies(t *testing.T) {
-	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &ProxyConfig{}, 0, nil, nil, "")
+	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &PodProxyConfig{}, 0, nil, nil, "")
 	// Set terminated exit codes and test restart policy logic
 	setExit := func(code int32) {
 		vp.pod.Status.ContainerStatuses[0].State = v1.ContainerState{Terminated: &v1.ContainerStateTerminated{ExitCode: code}}
@@ -162,7 +162,7 @@ func TestPodShouldRestartPolicies(t *testing.T) {
 }
 
 func TestHandleContainerRestartIncrementsCountAndBackoffFlag(t *testing.T) {
-	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &ProxyConfig{}, 0, nil, nil, "")
+	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &PodProxyConfig{}, 0, nil, nil, "")
 	vp.handleContainerRestart(false)
 	if vp.pod.Status.ContainerStatuses[0].RestartCount != 1 {
 		t.Fatalf("expected restartcount 1")
@@ -180,7 +180,7 @@ func TestHandleContainerRestartIncrementsCountAndBackoffFlag(t *testing.T) {
 }
 
 func TestFailPodSetsTerminationWithReasonAndExitCode(t *testing.T) {
-	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &ProxyConfig{}, 0, nil, nil, "")
+	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &PodProxyConfig{}, 0, nil, nil, "")
 	vp.FailContainer("boom")
 	cs := vp.pod.Status.ContainerStatuses[0]
 	if cs.State.Terminated == nil {
@@ -192,7 +192,7 @@ func TestFailPodSetsTerminationWithReasonAndExitCode(t *testing.T) {
 }
 
 func TestImagePullAlways(t *testing.T) {
-	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &ProxyConfig{}, 0, nil, nil, "")
+	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &PodProxyConfig{}, 0, nil, nil, "")
 	if vp.ImagePullAlways() {
 		t.Fatalf("expected false by default")
 	}
@@ -203,7 +203,7 @@ func TestImagePullAlways(t *testing.T) {
 }
 
 func TestAuthHeadersUsesToken(t *testing.T) {
-	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &ProxyConfig{}, 0, nil, nil, "token123")
+	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &PodProxyConfig{}, 0, nil, nil, "token123")
 	vp.authToken = "token123"
 	h := vp.authHeaders()
 	if got := h.Get("Authorization"); got != "Bearer token123" {
@@ -214,7 +214,7 @@ func TestAuthHeadersUsesToken(t *testing.T) {
 // Basic smoke tests for runtime helpers that don't require network
 // TODO: Better test for pushes
 //func TestPushEnvVarsSkipsWhenEmptyAndErrorsOnNilClient(t *testing.T) {
-//	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &ProxyConfig{}, 0, map[string]map[string]string{}, nil, "")
+//	vp := NewVirtualPod("id1", newTestPod(), &Machine{}, &PodProxyConfig{}, 0, map[string]map[string]string{}, nil, "")
 //	// No mounts or configMaps => no-op
 //	if err := vp.PushEnvVars(context.Background(), nil); err != nil {
 //		// when nil maps, function returns early without checking client; here configMaps is empty so nil
@@ -222,7 +222,7 @@ func TestAuthHeadersUsesToken(t *testing.T) {
 //		t.Fatalf("expected nil error for no-op, got %v", err)
 //	}
 //	// When there are mounts/configMaps, it should check client exists
-//	vp = NewVirtualPod("id1", newTestPod(), &Machine{}, &ProxyConfig{}, 0, map[string]map[string]string{"cm": {}}, []FileMapping{{TargetPath: "/t", ConfigMapName: "cm", Key: "k"}}, "")
+//	vp = NewVirtualPod("id1", newTestPod(), &Machine{}, &PodProxyConfig{}, 0, map[string]map[string]string{"cm": {}}, []FileMapping{{TargetPath: "/t", ConfigMapName: "cm", Key: "k"}}, "")
 //	err := vp.PushEnvVars(context.Background(), nil)
 //	if err == nil {
 //		t.Fatalf("expected error on nil client when work to do")

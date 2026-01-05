@@ -68,7 +68,7 @@ func main() {
 		Short: "Run the container agent",
 		Long:  `Run the container agent to simulate pod runtime behavior.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			a := agent.NewAgent(port, command)
+			a := agent.NewAgent(port, command, "/etc/virtualpod")
 			a.AuthToken = authToken
 			a.EnablePromtail = enablePromtail
 			a.EnableProxy = enableProxy

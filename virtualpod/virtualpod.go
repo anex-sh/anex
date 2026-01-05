@@ -15,6 +15,33 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type ProxyServerConfig struct {
+	Endpoint  string `yaml:"endpoint"`
+	PublicKey string `yaml:"public_key"`
+	DNS       string `yaml:"dns,omitempty"`
+}
+
+type ProxyClientConfig struct {
+	Address           string `yaml:"address"`
+	PrivateKey        string `yaml:"private_key"`
+	PublicKey         string `yaml:"public_key"`
+	GatewayPortOffset int    `yaml:"gateway_port_offset"`
+	Assigned          bool
+}
+
+type PodProxyConfig struct {
+	Enabled bool
+	Server  ProxyServerConfig `yaml:"server"`
+	Client  ProxyClientConfig `yaml:"client"`
+}
+
+type ProxyTunnels struct {
+	Endpoints []struct {
+		Address       string `yaml:"address"`
+		ContainerPort int    `yaml:"containerPort"`
+	} `yaml:"endpoints"`
+}
+
 type FileMapping struct {
 	TargetPath    string
 	ConfigMapName string
@@ -30,8 +57,8 @@ type VirtualPod struct {
 	pod                     *v1.Pod
 	machine                 *Machine
 	finalized               bool
-	proxyConfig             *ProxyConfig
-	proxySlot               int
+	gatewaySlotIndex        int
+	agentPort               int
 	provisioningCompleted   bool
 	readySince              time.Time
 	effectiveRestartCounter uint
@@ -43,23 +70,28 @@ type VirtualPod struct {
 	volumeMounts            []FileMapping
 }
 
-func NewVirtualPod(id string, pod *v1.Pod, machine *Machine, proxyConfig *ProxyConfig, slot int, configMaps map[string]map[string]string, volumeMounts []FileMapping, authToken string) *VirtualPod {
+func NewVirtualPod(id string, pod *v1.Pod, machine *Machine, gatewaySlot int, configMaps map[string]map[string]string, volumeMounts []FileMapping, authToken string) *VirtualPod {
 	return &VirtualPod{
-		name:         pod.Name,
-		namespace:    pod.Namespace,
-		id:           id,
-		pod:          pod,
-		machine:      machine,
-		proxyConfig:  proxyConfig,
-		proxySlot:    slot,
-		authHeader:   http.Header{"Authorization": []string{"Bearer " + authToken}},
-		configMaps:   configMaps,
-		volumeMounts: volumeMounts,
+		name:             pod.Name,
+		namespace:        pod.Namespace,
+		id:               id,
+		pod:              pod,
+		machine:          machine,
+		gatewaySlotIndex: gatewaySlot,
+		authHeader:       http.Header{"Authorization": []string{"Bearer " + authToken}},
+		configMaps:       configMaps,
+		volumeMounts:     volumeMounts,
 	}
 }
 
 func (vp *VirtualPod) ID() string {
 	return vp.id
+}
+
+func (vp *VirtualPod) GetAgentAddress() string {
+	slot := vp.gatewaySlotIndex + 10 + 1
+
+	return fmt.Sprintf("http://10.254.254.%d:%d", slot, vp.agentPort)
 }
 
 func (vp *VirtualPod) MachineRentID() string {
@@ -80,6 +112,12 @@ func (vp *VirtualPod) SetMachine(machine *Machine) {
 	vp.machine = machine
 	vp.pod.ObjectMeta.Annotations["gpu-provider.glami.cz/vastai-machine-rent-id"] = machine.ID
 	vp.pod.ObjectMeta.Annotations["gpu-provider.glami.cz/vastai-machine-stable-id"] = machine.MachineID
+}
+
+func (vp *VirtualPod) SetAgentPort(port int) {
+	vp.mutex.Lock()
+	defer vp.mutex.Unlock()
+	vp.agentPort = port
 }
 
 func (vp *VirtualPod) RemoveMachine() {
@@ -148,7 +186,7 @@ func (vp *VirtualPod) UpdatePod(pod *v1.Pod) {
 }
 
 func (vp *VirtualPod) ProxySlot() int {
-	return vp.proxySlot
+	return vp.gatewaySlotIndex
 }
 
 func (vp *VirtualPod) ImagePullAlways() bool {
@@ -193,7 +231,7 @@ func (vp *VirtualPod) PodStatusUpdate(ctx context.Context, httpClient *retryable
 	vp.mutex.RLock()
 	defer vp.mutex.RUnlock()
 
-	url := vp.machine.GetAgentAddress() + "/status"
+	url := vp.GetAgentAddress() + "/status"
 	headers := vp.authHeaders()
 	_, newStateRaw, err := utils.MakeRequest[v1.ContainerState](ctx, httpClient, http.MethodGet, url, nil, headers)
 	if err != nil {

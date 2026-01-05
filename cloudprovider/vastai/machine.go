@@ -46,9 +46,6 @@ func GenericMachineAdapter(vastAIMachine *Machine) *virtualpod.Machine {
 
 	if vastAIMachine.ActualStatus == "running" {
 		machine.State = virtualpod.MachineStateRunning
-		// TODO: Handle conversion error
-		// TODO: Do not hardcode agent port
-		machine.AgentPort, _ = strconv.Atoi(vastAIMachine.Ports["25001/tcp"][0].HostPort)
 	} else if vastAIMachine.ActualStatus == "created" && strings.HasPrefix(vastAIMachine.StatusMessage, "Error") {
 		machine.State = virtualpod.MachineStateFailed
 	} else {

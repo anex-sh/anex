@@ -3,7 +3,6 @@ package virtualpod
 import (
 	"bytes"
 	"context"
-	"errors"
 	"sort"
 	"text/template"
 
@@ -15,8 +14,8 @@ const wireproxyConfigTemplate = `
 [Interface]
 Address     = {{ .ProxyConfig.Client.Address }}
 PrivateKey  = {{ .ProxyConfig.Client.PrivateKey }}
-ListenPort  = {{ "${VAST_UDP_PORT_72000}" }}
-DNS         = 1.1.1.1
+ListenPort  = {{ .WireproxyPort }}
+DNS         = 10.254.254.1
 
 [Peer]
 PublicKey           = {{ .ProxyConfig.Server.PublicKey }}
@@ -26,6 +25,10 @@ PersistentKeepalive = 25
 
 [HTTP]
 BindAddress = 127.0.0.1:3128
+
+[TCPServerTunnel]
+ListenPort = {{ .AgentPublicPort }}
+Target = 127.0.0.1:{{ .AgentLocalPort }}
 
 {{- if .ContainerPorts }}
 {{ range $i, $p := .ContainerPorts }}
@@ -44,40 +47,19 @@ Target      = {{ $t.Address }}
 {{- end }}
 `
 
-type ProxyServerConfig struct {
-	Endpoint  string `yaml:"endpoint"`
-	PublicKey string `yaml:"public_key"`
-	DNS       string `yaml:"dns,omitempty"`
+type OnStartTemplateParams struct {
+	ProxyConfig     PodProxyConfig
+	ContainerPorts  []int
+	ProxyTunnels    ProxyTunnels
+	WireproxyPort   string
+	AgentPublicPort string
+	AgentLocalPort  string
 }
 
-type ProxyClientConfig struct {
-	Address           string `yaml:"address"`
-	PrivateKey        string `yaml:"private_key"`
-	PublicKey         string `yaml:"public_key"`
-	GatewayPortOffset int    `yaml:"gateway_port_offset"`
-	Assigned          bool
-}
-
-type ProxyConfig struct {
-	Server ProxyServerConfig `yaml:"server"`
-	Client ProxyClientConfig `yaml:"client"`
-}
-
-type ProxyTunnels struct {
-	Endpoints []struct {
-		Address       string `yaml:"address"`
-		ContainerPort int    `yaml:"containerPort"`
-	} `yaml:"endpoints"`
-}
-
-func (vp *VirtualPod) generateWireproxyConfig(ctx context.Context) (string, error) {
+func (vp *VirtualPod) generateWireproxyConfig(ctx context.Context, proxyConfig PodProxyConfig, wireproxyPort, agentPublicPort, agentLocalPort string) (string, error) {
 	vp.mutex.RLock()
 	defer vp.mutex.RUnlock()
 	logger := log.G(ctx)
-
-	if vp.proxyConfig == nil {
-		return "", errors.New("proxy config not set")
-	}
 
 	// Open Ports
 	var ports []int
@@ -99,16 +81,13 @@ func (vp *VirtualPod) generateWireproxyConfig(ctx context.Context) (string, erro
 		}
 	}
 
-	type OnStartTemplateParams struct {
-		ProxyConfig    ProxyConfig
-		ContainerPorts []int
-		ProxyTunnels   ProxyTunnels
-	}
-
 	params := OnStartTemplateParams{
-		ProxyConfig:    *vp.proxyConfig,
-		ContainerPorts: ports,
-		ProxyTunnels:   proxyTunnels,
+		ProxyConfig:     proxyConfig,
+		ContainerPorts:  ports,
+		ProxyTunnels:    proxyTunnels,
+		WireproxyPort:   wireproxyPort,
+		AgentPublicPort: agentPublicPort,
+		AgentLocalPort:  agentLocalPort,
 	}
 
 	t := template.Must(template.New("wireproxy").Funcs(template.FuncMap{
