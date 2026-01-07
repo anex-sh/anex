@@ -299,6 +299,9 @@ func LoadConfig(providerConfig string) (config ProviderConfig, err error) {
 		config.LogLevel = "info"
 	}
 
+	// TODO: Hardcoded overrides
+	config.Gateway.Enable = true
+
 	// Apply defaults for Provisioning
 	if config.Provisioning.MaxRetries == 0 {
 		config.Provisioning.MaxRetries = 10

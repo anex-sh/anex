@@ -113,16 +113,14 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 
 	// Initialize WireGuard keys and assignments if proxy is enabled
 	wgKeysDirty := false
-	if config.Gateway.Enable {
-		err = provider.loadProxyConfig()
-		if err != nil {
-			log.G(ctx).Errorf("failed to load wireguard keys: %v", err)
-		}
+	err = provider.loadProxyConfig()
+	if err != nil {
+		log.G(ctx).Errorf("failed to load wireguard keys: %v", err)
+	}
 
-		dirtyFilePath := filepath.Join(filepath.Dir(config.Gateway.ConfigPath), ".dirty")
-		if _, err := os.Stat(dirtyFilePath); err == nil {
-			wgKeysDirty = true
-		}
+	dirtyFilePath := filepath.Join(filepath.Dir(config.Gateway.ConfigPath), ".dirty")
+	if _, err := os.Stat(dirtyFilePath); err == nil {
+		wgKeysDirty = true
 	}
 
 	// Load persisted machine bans if configured
@@ -277,9 +275,9 @@ func (p *Provider) NodeName() string {
 }
 
 func (p *Provider) reserveGatewaySlot() (int, error) {
-	if !p.config.Gateway.Enable {
-		return 0, nil
-	}
+	//if !p.config.Gateway.Enable {
+	//	return 0, nil
+	//}
 
 	for idx, proxy := range p.clientProxySettings {
 		if proxy.Assigned {
@@ -330,13 +328,11 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 
 	var err error
 	var gatewaySlotId int
-	if p.config.Gateway.Enable {
-		gatewaySlotId, err = p.reserveGatewaySlot()
-		if err != nil {
-			return err
-		}
-		pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"] = strconv.Itoa(gatewaySlotId)
+	gatewaySlotId, err = p.reserveGatewaySlot()
+	if err != nil {
+		return err
 	}
+	pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"] = strconv.Itoa(gatewaySlotId)
 
 	now := metav1.NewTime(time.Now())
 	pod.Status = v1.PodStatus{

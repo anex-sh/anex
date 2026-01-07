@@ -342,30 +342,30 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			return ErrMachineFailed
 		}
 
-		if p.config.Gateway.Enable {
-			logger.Info("Pushing wireproxy config to agent")
-			proxyConfig, _ := p.getPodProxyConfigById(vp.ProxySlot())
+		// if p.config.Gateway.Enable {
+		logger.Info("Pushing wireproxy config to agent")
+		proxyConfig, _ := p.getPodProxyConfigById(vp.ProxySlot())
 
-			var wireproxyPort, agentPublicPort, agentLocalPort string
-			if p.config.CloudProvider.Mock {
-				// TODO: Refactor to get rid of hardcoded part
-				effectiveID, _ := strconv.Atoi(vp.ID())
-				wireproxyPort = strconv.Itoa(51900 + effectiveID)
-				agentPublicPort = strconv.Itoa(31000 + effectiveID)
-				agentLocalPort = strconv.Itoa(32000 + effectiveID)
-			} else {
-				wireproxyPort = "${VAST_UDP_PORT_72000}"
-				agentPublicPort = "9000"
-				agentLocalPort = "8080"
-			}
-			err = vp.PushWireproxyConfig(agentCtx, client, proxyConfig, wireproxyPort, agentPublicPort, agentLocalPort)
-			if err != nil {
-				logger.Errorf("Failed to push wireproxy config: %v", err)
-				p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "RuntimeInitFailed", "Failed to configure runtime environment")
-				p.metrics.podsProvisioningTotal.WithLabelValues("false", "wireproxy_config_push_fail").Inc()
-				return ErrMachineFailed
-			}
+		var wireproxyPort, agentPublicPort, agentLocalPort string
+		if p.config.CloudProvider.Mock {
+			// TODO: Refactor to get rid of hardcoded part
+			effectiveID, _ := strconv.Atoi(vp.ID())
+			wireproxyPort = strconv.Itoa(51900 + effectiveID)
+			agentPublicPort = strconv.Itoa(31000 + effectiveID)
+			agentLocalPort = strconv.Itoa(32000 + effectiveID)
+		} else {
+			wireproxyPort = "${VAST_UDP_PORT_72000}"
+			agentPublicPort = "9000"
+			agentLocalPort = "8080"
 		}
+		err = vp.PushWireproxyConfig(agentCtx, client, proxyConfig, wireproxyPort, agentPublicPort, agentLocalPort)
+		if err != nil {
+			logger.Errorf("Failed to push wireproxy config: %v", err)
+			p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "RuntimeInitFailed", "Failed to configure runtime environment")
+			p.metrics.podsProvisioningTotal.WithLabelValues("false", "wireproxy_config_push_fail").Inc()
+			return ErrMachineFailed
+		}
+		//}
 
 		if p.config.Promtail.Enable {
 			// TODO: Implement multiple clients

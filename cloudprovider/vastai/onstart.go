@@ -49,7 +49,7 @@ ListenPort  = {{ "${VAST_UDP_PORT_72000}" }}
 
 [Peer]
 PublicKey           = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PK}" }}
-Endpoint            = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT}" }}
+Endpoint            = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT}" }}:51820
 AllowedIPs          = 0.0.0.0/0
 PersistentKeepalive = 25
 

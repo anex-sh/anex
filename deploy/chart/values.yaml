@@ -71,6 +71,9 @@ appConfig:
         enable: true
         timeout: "1d"
 
+  gateway:
+    configPath: /gateway/config.yaml
+
   promtail:
     enable: false
     clients: []
