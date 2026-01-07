@@ -1,9 +1,17 @@
+# TBA: For now just true
+
 deployment:
   affinity: {}
   nodeSelector: {}
+  tolerations: []
 
   serviceAccount:
     annotations: {}
+
+  gateway:
+    enable: true
+    AWSLoadBalancerController: false
+    domain: ""
 
   containers:
     virtualKubelet:
@@ -20,25 +28,19 @@ deployment:
           cpu: "1"
           memory: "1Gi"
 
-  gateway:
-    enable: true
-    AWSLoadBalancerController: false
-    domain: ""
-    port: 51820
-    nodePort: 31311
+    gateway:
+      image:
+        repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
+        tag: "gateway"
+        pullPolicy: Always
 
-    image:
-      repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
-      tag: "gateway"
-      pullPolicy: Always
-
-    resources:
-      requests:
-        cpu: "0.5"
-        memory: "512Mi"
-      limits:
-        cpu: "0.5"
-        memory: "512Mi"
+      resources:
+        requests:
+          cpu: "0.5"
+          memory: "512Mi"
+        limits:
+          cpu: "0.5"
+          memory: "512Mi"
 
 
 # Application configuration
@@ -54,7 +56,7 @@ appConfig:
 
   virtualNode:
     nodeName: "virtual-node"
-    podLimit: "1"
+    podLimit: "10"
     cpu: "1000"
     memory: "1000Gi"
     labels: {}
@@ -68,11 +70,6 @@ appConfig:
       localFile:
         enable: true
         timeout: "1d"
-
-  agentAuthToken: ""
-
-  proxy:
-    enable: false
 
   promtail:
     enable: false

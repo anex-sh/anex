@@ -183,7 +183,7 @@ func main() {
 	waitForDNS(gatewayEndpoint, 90)
 
 	// Generate your config content here:
-	peerCount := 3
+	peerCount := 64
 	configContent, err := generateWireguardConfig(
 		gatewayEndpoint,
 		gatewayPort,

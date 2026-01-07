@@ -23,11 +23,14 @@ spec:
       {{- end }}
       serviceAccountName: "{{ include "chart.fullname" . }}"
 
-      {{- if .Values.deployment.gateway.enable }}
+      tolerations:
+        {{- toYaml .Values.deployment.tolerations | nindent 8 }}
+
+      # Gateway WG secrets init
       initContainers:
         - name: gateway-init
-          image: {{ .Values.deployment.gateway.image.repository }}:{{ .Values.deployment.gateway.image.tag | default .Chart.AppVersion }}
-          imagePullPolicy: {{ .Values.deployment.gateway.image.pullPolicy }}
+          image: {{ .Values.deployment.containers.gateway.image.repository }}:{{ .Values.deployment.containers.gateway.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.deployment.containers.gateway.image.pullPolicy }}
           command: ["/gateway-init"]
           env:
             - name: POD_NAMESPACE
@@ -43,13 +46,13 @@ spec:
             - name: GATEWAY_SERVICE_NAME
               value: "{{ include "chart.fullname" . }}-gateway"
             - name: GATEWAY_PORT
-              value: "{{ .Values.deployment.gateway.port }}"
+              value: "51820"
           volumeMounts:
             - name: gateway-config
               mountPath: /gateway
-      {{- end }}
 
       containers:
+        # Virtual Kubelet
         - name: virtual-kubelet
           image: {{ .Values.deployment.containers.virtualKubelet.image.repository }}:{{ .Values.deployment.containers.virtualKubelet.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.deployment.containers.virtualKubelet.image.pullPolicy }}
@@ -60,12 +63,10 @@ spec:
             {{- toYaml .Values.deployment.containers.virtualKubelet.resources | nindent 12 }}
           {{- end }}
           env:
-            {{- if .Values.deployment.gateway.enable }}
             - name: GATEWAY_CONFIG_PATH
               value: "/gateway/config.yaml"
             - name: PROXY_ENABLE
               value: "true"
-            {{- end }}
             - name: VKUBELET_POD_IP
               valueFrom:
                 fieldRef:
@@ -75,41 +76,35 @@ spec:
               mountPath: /virtual-kubelet-config.yaml
               subPath: virtual-kubelet-config.yaml
               readOnly: true
-            {{- if .Values.deployment.gateway.enable }}
-          volumeMounts:
             - name: gateway-config
               mountPath: /gateway
-            {{- end }}
 
-        {{- if .Values.deployment.gateway.enable }}
+        # Gateway
         - name: gateway
-          image: {{ .Values.deployment.gateway.image.repository }}:{{ .Values.deployment.gateway.image.tag | default .Chart.AppVersion }}
-          imagePullPolicy: {{ .Values.deployment.gateway.image.pullPolicy }}
+          image: {{ .Values.deployment.containers.gateway.image.repository }}:{{ .Values.deployment.containers.gateway.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.deployment.containers.gateway.image.pullPolicy }}
           env:
             - name: GATEWAY_CONFIG_PATH
               value: "/gateway/config.yaml"
           ports:
             - name: wg
-              containerPort: {{ .Values.deployment.gateway.port }}
+              containerPort: 51820
               protocol: UDP
             - name: hc
               containerPort: 9000
-              {{- if not .Values.deployment.gateway.AWSLoadBalancerController }}
-              hostPort: {{ .Values.deployment.gateway.nodePort }}
-              {{- end }}
               protocol: TCP
           securityContext:
             capabilities:
               add: [ "NET_ADMIN" ]
-          {{- if .Values.deployment.gateway.resources }}
+          {{- if .Values.deployment.containers.gateway.resources }}
           resources:
-            {{- toYaml .Values.deployment.gateway.resources | nindent 12 }}
+            {{- toYaml .Values.deployment.containers.gateway.resources | nindent 12 }}
           {{- end }}
           volumeMounts:
             - name: gateway-config
               mountPath: /gateway
-        {{- end }}
 
+        # DNS Forwarder
         - name: wg-dns
           image: coredns/coredns:1.11.1
           args: ["-conf", "/etc/coredns/Corefile"]
@@ -131,13 +126,10 @@ spec:
         - name: virtual-kubelet-config
           configMap:
             name: "{{ include "chart.fullname" . }}-virtual-kubelet-config"
-        {{- if .Values.deployment.gateway.enable }}
         - name: gateway-config
           emptyDir:
             sizeLimit: 500Mi
             medium: Memory
         - name: wg-dns-corefile
           configMap:
-            name: wg-dns-corefile
-        {{- end }}
-{{/*            secretName: "{{ include "chart.fullname" . }}-gateway-config"*/}}
+            name: "{{ include "chart.fullname" . }}-wg-dns-corefile"
