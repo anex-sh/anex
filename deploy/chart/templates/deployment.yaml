@@ -47,6 +47,8 @@ spec:
               value: "{{ include "chart.fullname" . }}-gateway"
             - name: GATEWAY_PORT
               value: "51820"
+            - name: PEER_COUNT
+              value: "10"
           volumeMounts:
             - name: gateway-config
               mountPath: /gateway
