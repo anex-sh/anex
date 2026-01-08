@@ -63,6 +63,8 @@ spec:
             {{- toYaml .Values.deployment.containers.virtualKubelet.resources | nindent 12 }}
           {{- end }}
           env:
+            - name: BANS_OVERWRITE
+              value: "{\"203531\":\"2026-01-08T06:30:36.205086888+01:00\"}"
             - name: GATEWAY_CONFIG_PATH
               value: "/gateway/config.yaml"
             - name: PROXY_ENABLE

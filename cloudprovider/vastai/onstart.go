@@ -48,6 +48,7 @@ cat <<EOF > /etc/virtualpod/wireproxy.tpl
 Address     = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_ADDRESS}" }}
 PrivateKey  = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_PK}" }}
 ListenPort  = {{ "${VAST_UDP_PORT_72000}" }}
+DNS         = 10.254.254.1
 
 [Peer]
 PublicKey           = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PK}" }}
@@ -61,7 +62,6 @@ BindAddress = 127.0.0.1:3128
 [TCPServerTunnel]
 ListenPort = 9000
 Target = 127.0.0.1:8080
-EOF
 
 {{ range $i, $p := .ContainerPorts }}
 [TCPServerTunnel]
@@ -74,6 +74,7 @@ Target     = 127.0.0.1:{{ $p }}
 BindAddress = 127.0.0.1:{{ $t.ContainerPort }}
 Target      = {{ $t.Address }}
 {{ end }}
+EOF
 
 # rm -rf /etc/pip.conf
 export PIP_PROXY="http://127.0.0.1:3128"
