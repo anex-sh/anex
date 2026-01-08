@@ -80,6 +80,10 @@ func (vp *VirtualPod) PushEnvVars(ctx context.Context, httpClient *retryablehttp
 		if strings.HasPrefix(env.Name, "AWS_WEB_IDENTITY_TOKEN_FILE") {
 			continue
 		}
+
+		if strings.HasPrefix(env.Name, "GW_TUNNEL_") {
+			continue
+		}
 		data += fmt.Sprintf("%s=%s\n", env.Name, env.Value)
 	}
 

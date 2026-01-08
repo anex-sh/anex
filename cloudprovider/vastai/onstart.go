@@ -8,12 +8,14 @@ import (
 )
 
 type OnStartTemplateParams struct {
-	Workdir      string
-	Command      string
-	AgentURL     string
-	WireproxyURL string
-	PromtailURL  string
-	ProxyConfig  virtualpod.PodProxyConfig
+	Workdir        string
+	Command        string
+	AgentURL       string
+	WireproxyURL   string
+	PromtailURL    string
+	ProxyConfig    virtualpod.PodProxyConfig
+	ContainerPorts []int
+	ProxyTunnels   []ProxyTunnel
 }
 
 func GenerateOnStartScript(params OnStartTemplateParams) string {
@@ -53,10 +55,25 @@ Endpoint            = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT}" }}:518
 AllowedIPs          = 0.0.0.0/0
 PersistentKeepalive = 25
 
+[HTTP]
+BindAddress = 127.0.0.1:3128
+
 [TCPServerTunnel]
 ListenPort = 9000
 Target = 127.0.0.1:8080
 EOF
+
+{{ range $i, $p := .ContainerPorts }}
+[TCPServerTunnel]
+ListenPort = {{ add $.ProxyConfig.Client.GatewayPortOffset $i }}
+Target     = 127.0.0.1:{{ $p }}
+{{ end }}
+
+{{- range $i, $t := .ProxyTunnels }}
+[TCPClientTunnel]
+BindAddress = 127.0.0.1:{{ $t.ContainerPort }}
+Target      = {{ $t.Address }}
+{{ end }}
 
 # rm -rf /etc/pip.conf
 export PIP_PROXY="http://127.0.0.1:3128"

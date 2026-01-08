@@ -165,6 +165,11 @@ func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.Machin
 	return offers, nil
 }
 
+type ProxyTunnel struct {
+	ContainerPort int
+	Address       string
+}
+
 func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bool) (machineID string, err error) {
 	logger := log.G(ctx)
 	logger.Infof("Attempting to provision machine from %d candidates", len(candidatesID))
@@ -197,13 +202,35 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 		commandWrapper += " --promtail"
 	}
 
+	var proxyTunnels []ProxyTunnel
+	envVars := pod.Spec.Containers[0].Env
+	for _, env := range envVars {
+		const prefix = "GW_TUNNEL_"
+		if !strings.HasPrefix(env.Name, prefix) || env.Value == "" {
+			continue
+		}
+
+		portStr := strings.TrimPrefix(env.Name, prefix)
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			continue // not a valid int, skip
+		}
+
+		proxyTunnels = append(proxyTunnels, ProxyTunnel{
+			ContainerPort: port,
+			Address:       env.Value,
+		})
+	}
+
 	params := OnStartTemplateParams{
-		Workdir:      pod.Spec.Containers[0].WorkingDir,
-		Command:      commandWrapper,
-		AgentURL:     agentURL,
-		WireproxyURL: wireproxyURL,
-		PromtailURL:  promtailURL,
-		ProxyConfig:  proxy,
+		Workdir:        pod.Spec.Containers[0].WorkingDir,
+		Command:        commandWrapper,
+		AgentURL:       agentURL,
+		WireproxyURL:   wireproxyURL,
+		PromtailURL:    promtailURL,
+		ProxyConfig:    proxy,
+		ContainerPorts: ports,
+		ProxyTunnels:   proxyTunnels,
 	}
 
 	var diskSize int
