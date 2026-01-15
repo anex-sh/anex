@@ -1,6 +1,6 @@
 apiVersion: v2
-name: gpu-provider
+name: helm
 description: Glami provider for GPU machines in VastAI and other
 type: application
-version: 0.0.0
-appVersion: "v0.0.0"
+version: 0.3.0
+appVersion: "v0.3.0"

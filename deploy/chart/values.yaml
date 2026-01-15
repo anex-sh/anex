@@ -10,13 +10,13 @@ deployment:
 
   gateway:
     enable: true
-    AWSLoadBalancerController: false
+    AWSLoadBalancerController: true
     domain: ""
 
   containers:
     virtualKubelet:
       image:
-        repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
+        repository: "public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet"
         tag: latest
         pullPolicy: Always
 
@@ -30,8 +30,8 @@ deployment:
 
     gateway:
       image:
-        repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
-        tag: "gateway"
+        repository: "public.ecr.aws/m4v1f8q5/gpu-provider/gateway"
+        tag: latest
         pullPolicy: Always
 
       resources:
