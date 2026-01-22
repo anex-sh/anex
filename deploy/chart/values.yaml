@@ -9,9 +9,9 @@ deployment:
     annotations: {}
 
   gateway:
-    enable: true
-    AWSLoadBalancerController: true
+    class: "" # enum: [node-port | aws-eks]
     domain: ""
+    nodePort: 31000
 
   containers:
     virtualKubelet:
@@ -34,6 +34,7 @@ deployment:
         tag: latest
         pullPolicy: Always
 
+      # TODO: Remove requirements
       resources:
         requests:
           cpu: "0.5"

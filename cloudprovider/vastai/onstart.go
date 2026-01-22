@@ -40,6 +40,7 @@ touch ~/.no_auto_tmux
 export GPU_PROVIDER_GATEWAY_CLIENT_ADDRESS={{ .ProxyConfig.Client.Address }}
 export GPU_PROVIDER_GATEWAY_CLIENT_PK={{ .ProxyConfig.Client.PrivateKey }}
 export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT={{ .ProxyConfig.Server.Endpoint }}
+export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PORT={{ .ProxyConfig.Server.Port }}
 export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PK={{ .ProxyConfig.Server.PublicKey }}
 
 mkdir -p /etc/virtualpod
@@ -52,7 +53,7 @@ DNS         = 10.254.254.1
 
 [Peer]
 PublicKey           = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PK}" }}
-Endpoint            = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT}" }}:51820
+Endpoint            = {{ "${GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT}" }}:{{ "${GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PORT}" }}
 AllowedIPs          = 0.0.0.0/0
 PersistentKeepalive = 25
 

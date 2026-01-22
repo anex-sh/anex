@@ -21,6 +21,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// TODO: Use implementation from the VK package
 type PeerConfig struct {
 	Address           string `yaml:"address"`
 	PrivateKey        string `yaml:"private_key"`
