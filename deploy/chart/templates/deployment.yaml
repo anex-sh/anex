@@ -46,9 +46,13 @@ spec:
             - name: GATEWAY_SERVICE_NAME
               value: "{{ include "chart.fullname" . }}-gateway"
             - name: GATEWAY_PORT
+              {{- if eq .Values.deployment.gateway.class "aws-eks" }}
               value: "51820"
+              {{- else }}
+              value: "{{ .Values.deployment.gateway.nodePort }}"
+              {{- end }}
             - name: PEER_COUNT
-              value: "10"
+              value: "32"
           volumeMounts:
             - name: gateway-config
               mountPath: /gateway

@@ -37,6 +37,29 @@ sleep 3
 
 touch ~/.no_auto_tmux
 
+ensure_curl() {
+    if command -v curl >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get update -y
+        apt-get install -y curl
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y curl
+    elif command -v apk >/dev/null 2>&1; then
+        apk add --no-cache curl
+    else
+        echo "No supported package manager found (apt-get, dnf, apk)" >&2
+        return 1
+    fi
+}
+
+ensure_curl || {
+    echo "curl is required but could not be installed"
+    exit 1
+}
+
 export GPU_PROVIDER_GATEWAY_CLIENT_ADDRESS={{ .ProxyConfig.Client.Address }}
 export GPU_PROVIDER_GATEWAY_CLIENT_PK={{ .ProxyConfig.Client.PrivateKey }}
 export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT={{ .ProxyConfig.Server.Endpoint }}

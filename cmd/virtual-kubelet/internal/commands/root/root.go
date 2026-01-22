@@ -154,6 +154,9 @@ func runRootCommand(ctx context.Context, s *provider.Store, c Opts) error {
 	},
 		nodeutil.WithClient(clientSet),
 		setAuth(config.VirtualNode.NodeName, apiConfig),
+
+		// TODO: Check config.tls or something
+
 		// No access to the root CA on EKS, so we need to disable TLS
 		// nodeutil.WithTLSConfig(
 		//	 nodeutil.WithKeyPairFromPath(apiConfig.CertPath, apiConfig.KeyPath),

@@ -50,4 +50,5 @@ spec:
     - port: 51820
       targetPort: 51820
       nodePort: {{ .Values.deployment.gateway.nodePort }}
+      protocol: UDP
 {{- end }}

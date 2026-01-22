@@ -17,31 +17,31 @@ deployment:
     virtualKubelet:
       image:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet"
-        tag: latest
+        tag: "v0.3.1"
         pullPolicy: Always
 
       resources:
         requests:
-          cpu: "1"
-          memory: "1Gi"
+          cpu: "0.5"
+          memory: "512Mi"
         limits:
-          cpu: "1"
-          memory: "1Gi"
+          cpu: "0.5"
+          memory: "512Mi"
 
     gateway:
       image:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/gateway"
-        tag: latest
+        tag: "v0.3.1"
         pullPolicy: Always
 
       # TODO: Remove requirements
       resources:
         requests:
           cpu: "0.5"
-          memory: "512Mi"
+          memory: "256Mi"
         limits:
           cpu: "0.5"
-          memory: "512Mi"
+          memory: "256Mi"
 
 
 # Application configuration
