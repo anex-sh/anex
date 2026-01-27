@@ -7,3 +7,6 @@ docs/themes
 docs/node_modules
 docs/public
 docs/resources/_gen
+
+# Testing yamls
+testing/
