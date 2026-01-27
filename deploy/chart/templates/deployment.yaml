@@ -130,6 +130,32 @@ spec:
             runAsUser: 0
             allowPrivilegeEscalation: false
 
+        # Gateway Controller
+        - name: gateway-controller
+          image: {{ .Values.deployment.containers.gateway.image.repository }}:{{ .Values.deployment.containers.gateway.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.deployment.containers.gateway.image.pullPolicy }}
+          command: ["/gateway-controller"]
+          args:
+            - --haproxy-socket=/var/run/haproxy/haproxy.sock
+            - --workers=2
+            - -v=4
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          {{- if .Values.deployment.containers.gatewayController.resources }}
+          resources:
+            {{- toYaml .Values.deployment.containers.gatewayController.resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: haproxy-socket
+              mountPath: /var/run/haproxy
+
       volumes:
         - name: virtual-kubelet-config
           configMap:
@@ -141,3 +167,5 @@ spec:
         - name: wg-dns-corefile
           configMap:
             name: "{{ include "chart.fullname" . }}-wg-dns-corefile"
+        - name: haproxy-socket
+          emptyDir: {}

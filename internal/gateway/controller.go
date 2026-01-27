@@ -22,12 +22,15 @@ import (
 	"sync"
 	"time"
 
-	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
@@ -62,8 +65,9 @@ const (
 
 // Controller manages VirtualService resources and configures the gateway
 type Controller struct {
-	kubeClient kubernetes.Interface
-	scheme     *runtime.Scheme
+	kubeClient    kubernetes.Interface
+	dynamicClient dynamic.Interface
+	scheme        *runtime.Scheme
 
 	// Informers and listers
 	podInformer     cache.SharedIndexInformer
@@ -110,6 +114,7 @@ type VirtualPodInfo struct {
 // NewController creates a new Gateway controller
 func NewController(
 	kubeClient kubernetes.Interface,
+	dynamicClient dynamic.Interface,
 	scheme *runtime.Scheme,
 	informerFactory informers.SharedInformerFactory,
 	vsInformer cache.SharedIndexInformer,
@@ -129,6 +134,7 @@ func NewController(
 
 	c := &Controller{
 		kubeClient:          kubeClient,
+		dynamicClient:       dynamicClient,
 		scheme:              scheme,
 		podInformer:         informerFactory.Core().V1().Pods().Informer(),
 		podLister:           informerFactory.Core().V1().Pods().Lister(),
@@ -379,12 +385,50 @@ func removeString(slice []string, s string) []string {
 
 // Helper to update VirtualService
 func (c *Controller) updateVirtualService(ctx context.Context, vs *gpuv1alpha1.VirtualService) (*gpuv1alpha1.VirtualService, error) {
-	// This is a simplified version - in production you'd use a proper typed client
-	return vs, nil
+	// Use dynamic client to update VirtualService
+	gvr := schema.GroupVersionResource{
+		Group:    "gpu-provider.glami-ml.com",
+		Version:  "v1alpha1",
+		Resource: "virtualservices",
+	}
+	
+	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(vs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert VirtualService to unstructured: %w", err)
+	}
+	
+	unstructuredVS := &unstructured.Unstructured{Object: unstructuredObj}
+	
+	updated, err := c.dynamicClient.Resource(gvr).Namespace(vs.Namespace).Update(ctx, unstructuredVS, metav1.UpdateOptions{})
+	if err != nil {
+		return nil, err
+	}
+	
+	updatedVS := &gpuv1alpha1.VirtualService{}
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(updated.Object, updatedVS)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert unstructured to VirtualService: %w", err)
+	}
+	
+	return updatedVS, nil
 }
 
 // Helper to update VirtualService status
 func (c *Controller) updateVirtualServiceStatus(ctx context.Context, vs *gpuv1alpha1.VirtualService) error {
-	// This is a simplified version - in production you'd use a proper typed client with status subresource
-	return nil
+	// Use dynamic client to update VirtualService status subresource
+	gvr := schema.GroupVersionResource{
+		Group:    "gpu-provider.glami-ml.com",
+		Version:  "v1alpha1",
+		Resource: "virtualservices",
+	}
+	
+	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(vs)
+	if err != nil {
+		return fmt.Errorf("failed to convert VirtualService to unstructured: %w", err)
+	}
+	
+	unstructuredVS := &unstructured.Unstructured{Object: unstructuredObj}
+	
+	_, err = c.dynamicClient.Resource(gvr).Namespace(vs.Namespace).UpdateStatus(ctx, unstructuredVS, metav1.UpdateOptions{})
+	return err
 }

@@ -31,10 +31,20 @@ deployment:
     gateway:
       image:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/gateway"
-        tag: "v0.3.1"
+        # tag: "v0.3.1"
+        tag: "gateway-exp"
         pullPolicy: Always
 
       # TODO: Remove requirements
+      resources:
+        requests:
+          cpu: "0.5"
+          memory: "256Mi"
+        limits:
+          cpu: "0.5"
+          memory: "256Mi"
+
+    gatewayController:
       resources:
         requests:
           cpu: "0.5"

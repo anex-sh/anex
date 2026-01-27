@@ -47,3 +47,16 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments"]
     verbs: ["get","list"]
+
+  # Gateway Controller: VirtualService CRD
+  - apiGroups: ["gpu-provider.glami-ml.com"]
+    resources: ["virtualservices"]
+    verbs: ["get","list","watch","update","patch"]
+  - apiGroups: ["gpu-provider.glami-ml.com"]
+    resources: ["virtualservices/status"]
+    verbs: ["update","patch"]
+
+  # Gateway Controller: Service management
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get","list","watch","create","update","patch","delete"]
