@@ -22,9 +22,9 @@ import (
 	"sync"
 	"time"
 
+	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -49,11 +49,11 @@ const (
 	DefaultPortRangeEnd   = 9999
 
 	// Annotations
-	AnnotationVirtualPod      = "virtual"
-	AnnotationProxySlotID     = "gpu-provider.glami.cz/proxy-slot-id"
-	AnnotationManagedBy       = "gpu-provider.glami-ml.com/managed-by"
-	AnnotationManagedByValue  = "virtualservice-controller"
-	AnnotationOwnerService    = "gpu-provider.glami-ml.com/owner-virtualservice"
+	AnnotationVirtualPod     = "virtual"
+	AnnotationProxySlotID    = "gpu-provider.glami.cz/proxy-slot-id"
+	AnnotationManagedBy      = "gpu-provider.glami-ml.com/managed-by"
+	AnnotationManagedByValue = "virtualservice-controller"
+	AnnotationOwnerService   = "gpu-provider.glami-ml.com/owner-virtualservice"
 
 	// Wireguard IP calculation
 	WireguardSubnetBase = "10.254.254."
@@ -66,12 +66,12 @@ type Controller struct {
 	scheme     *runtime.Scheme
 
 	// Informers and listers
-	podInformer         cache.SharedIndexInformer
-	podLister           corelisters.PodLister
-	serviceInformer     cache.SharedIndexInformer
-	serviceLister       corelisters.ServiceLister
-	vsInformer          cache.SharedIndexInformer
-	vsLister            cache.GenericLister
+	podInformer     cache.SharedIndexInformer
+	podLister       corelisters.PodLister
+	serviceInformer cache.SharedIndexInformer
+	serviceLister   corelisters.ServiceLister
+	vsInformer      cache.SharedIndexInformer
+	vsLister        cache.GenericLister
 
 	// Gateway configuration
 	gatewayPodName      string
@@ -88,9 +88,9 @@ type Controller struct {
 	queue workqueue.RateLimitingInterface
 
 	// State tracking
-	mutex               sync.RWMutex
-	virtualServices     map[string]*gpuv1alpha1.VirtualService // key: namespace/name
-	virtualPods         map[string]*VirtualPodInfo              // key: namespace/name
+	mutex           sync.RWMutex
+	virtualServices map[string]*gpuv1alpha1.VirtualService // key: namespace/name
+	virtualPods     map[string]*VirtualPodInfo             // key: namespace/name
 
 	// Stop channel
 	stopCh <-chan struct{}
