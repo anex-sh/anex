@@ -330,9 +330,16 @@ func (c *Controller) reconcile(ctx context.Context, key string) error {
 		return err
 	}
 
-	vs, ok := obj.(*gpuv1alpha1.VirtualService)
+	// Convert from unstructured to typed VirtualService
+	unstructuredObj, ok := obj.(*unstructured.Unstructured)
 	if !ok {
-		return fmt.Errorf("expected VirtualService but got %T", obj)
+		return fmt.Errorf("expected *unstructured.Unstructured but got %T", obj)
+	}
+
+	vs := &gpuv1alpha1.VirtualService{}
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredObj.Object, vs)
+	if err != nil {
+		return fmt.Errorf("failed to convert unstructured to VirtualService: %w", err)
 	}
 
 	// Store in cache

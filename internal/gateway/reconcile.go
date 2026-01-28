@@ -362,19 +362,19 @@ func (c *Controller) handleVirtualServiceFinalization(ctx context.Context, vs *g
 
 func (c *Controller) setConditionAndUpdate(ctx context.Context, vs *gpuv1alpha1.VirtualService, condition metav1.Condition) error {
 	// Update or add condition
-	updated := false
+	found := false
 	for i, existingCondition := range vs.Status.Conditions {
 		if existingCondition.Type == condition.Type {
+			found = true
 			// Only update if status or reason changed
 			if existingCondition.Status != condition.Status || existingCondition.Reason != condition.Reason {
 				vs.Status.Conditions[i] = condition
-				updated = true
 			}
 			break
 		}
 	}
 
-	if !updated {
+	if !found {
 		vs.Status.Conditions = append(vs.Status.Conditions, condition)
 	}
 

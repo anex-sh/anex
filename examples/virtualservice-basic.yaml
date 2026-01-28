@@ -6,7 +6,7 @@ metadata:
 spec:
   gateway:
     selector:
-      app.kubernetes.io/name: gpu-provider-gateway
+      app: gpu-provider-helm
   service:
     selector:
       app: my-virtual-workload

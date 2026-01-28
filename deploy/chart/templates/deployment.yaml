@@ -111,6 +111,8 @@ spec:
           volumeMounts:
             - name: gateway-config
               mountPath: /gateway
+            - name: haproxy-socket
+              mountPath: /var/run/haproxy
 
         # DNS Forwarder
         - name: wg-dns
