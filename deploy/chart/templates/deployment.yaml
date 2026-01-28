@@ -138,7 +138,7 @@ spec:
           imagePullPolicy: {{ .Values.deployment.containers.gateway.image.pullPolicy }}
           command: ["/gateway-controller"]
           args:
-            - --haproxy-socket=/var/run/haproxy/haproxy.sock
+            - --haproxy-socket=/var/run/haproxy/dataplane.sock
             - --workers=2
             - -v=4
           env:

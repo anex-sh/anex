@@ -17,9 +17,13 @@ limitations under the License.
 package haproxy
 
 import (
-	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -41,20 +45,56 @@ type ListenerConfig struct {
 	Backends []Backend
 }
 
-// Manager manages HAProxy configuration
+// Manager manages HAProxy configuration via Data Plane API
 type Manager struct {
 	socketPath string
+	apiURL     string
+	client     *http.Client
 	mutex      sync.RWMutex
 	listeners  map[string][]ListenerConfig // owner key -> listener configs
 }
 
-// NewManager creates a new HAProxy manager
+// NewManager creates a new HAProxy manager using Data Plane API
 func NewManager(socketPath string) (*Manager, error) {
+	// Create HTTP client that uses Unix socket
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return net.Dial("unix", socketPath)
+			},
+		},
+		Timeout: 10 * time.Second,
+	}
+
 	m := &Manager{
 		socketPath: socketPath,
+		apiURL:     "http://unix/v2",
+		client:     client,
 		listeners:  make(map[string][]ListenerConfig),
 	}
+
+	// Wait for Data Plane API to be ready
+	if err := m.waitForAPI(); err != nil {
+		klog.Warningf("Data Plane API not ready yet: %v", err)
+	}
+
 	return m, nil
+}
+
+// waitForAPI waits for the Data Plane API to become available
+func (m *Manager) waitForAPI() error {
+	for i := 0; i < 10; i++ {
+		resp, err := m.client.Get(m.apiURL + "/info")
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				klog.Info("HAProxy Data Plane API is ready")
+				return nil
+			}
+		}
+		time.Sleep(time.Second)
+	}
+	return fmt.Errorf("Data Plane API not available after 10 seconds")
 }
 
 // Configure applies configuration for a specific owner (VirtualService)
@@ -65,7 +105,7 @@ func (m *Manager) Configure(ownerKey string, configs []ListenerConfig) error {
 	// Store configuration
 	m.listeners[ownerKey] = configs
 
-	// Apply to HAProxy via runtime API
+	// Apply to HAProxy via Data Plane API
 	return m.applyConfiguration(ownerKey, configs)
 }
 
@@ -96,41 +136,42 @@ func (m *Manager) applyConfiguration(ownerKey string, configs []ListenerConfig) 
 		frontendName := sanitizeName(config.Name)
 		backendName := sanitizeName(config.Name) + "-backend"
 
-		// Check if frontend exists, if not create it
-		exists, err := m.frontendExists(frontendName)
+		// Start a transaction
+		txID, err := m.startTransaction()
 		if err != nil {
-			klog.Errorf("Failed to check if frontend %s exists: %v", frontendName, err)
+			klog.Errorf("Failed to start transaction: %v", err)
 			continue
 		}
 
-		if !exists {
-			// Create frontend
-			if err := m.createFrontend(frontendName, config.Port, backendName); err != nil {
-				klog.Errorf("Failed to create frontend %s: %v", frontendName, err)
-				continue
-			}
-		}
-
-		// Check if backend exists, if not create it
-		backendExists, err := m.backendExists(backendName)
-		if err != nil {
-			klog.Errorf("Failed to check if backend %s exists: %v", backendName, err)
+		// Ensure backend exists
+		if err := m.ensureBackend(txID, backendName); err != nil {
+			klog.Errorf("Failed to ensure backend %s: %v", backendName, err)
+			m.deleteTransaction(txID)
 			continue
-		}
-
-		if !backendExists {
-			// Create backend
-			if err := m.createBackend(backendName); err != nil {
-				klog.Errorf("Failed to create backend %s: %v", backendName, err)
-				continue
-			}
 		}
 
 		// Update backend servers
-		if err := m.updateBackendServers(backendName, config.Backends); err != nil {
+		if err := m.updateBackendServers(txID, backendName, config.Backends); err != nil {
 			klog.Errorf("Failed to update backend servers for %s: %v", backendName, err)
+			m.deleteTransaction(txID)
 			continue
 		}
+
+		// Ensure frontend exists
+		if err := m.ensureFrontend(txID, frontendName, config.Port, backendName); err != nil {
+			klog.Errorf("Failed to ensure frontend %s: %v", frontendName, err)
+			m.deleteTransaction(txID)
+			continue
+		}
+
+		// Commit transaction
+		if err := m.commitTransaction(txID); err != nil {
+			klog.Errorf("Failed to commit transaction: %v", err)
+			m.deleteTransaction(txID)
+			continue
+		}
+
+		klog.V(4).Infof("Successfully configured %s with %d backends", frontendName, len(config.Backends))
 	}
 
 	return nil
@@ -144,94 +185,280 @@ func (m *Manager) removeConfiguration(ownerKey string, configs []ListenerConfig)
 		frontendName := sanitizeName(config.Name)
 		backendName := sanitizeName(config.Name) + "-backend"
 
-		// Disable and delete frontend
-		if err := m.deleteFrontend(frontendName); err != nil {
-			klog.Errorf("Failed to delete frontend %s: %v", frontendName, err)
+		// Start a transaction
+		txID, err := m.startTransaction()
+		if err != nil {
+			klog.Errorf("Failed to start transaction: %v", err)
+			continue
+		}
+
+		// Delete frontend
+		if err := m.deleteFrontend(txID, frontendName); err != nil {
+			klog.Warningf("Failed to delete frontend %s: %v", frontendName, err)
 		}
 
 		// Delete backend
-		if err := m.deleteBackend(backendName); err != nil {
-			klog.Errorf("Failed to delete backend %s: %v", backendName, err)
+		if err := m.deleteBackend(txID, backendName); err != nil {
+			klog.Warningf("Failed to delete backend %s: %v", backendName, err)
+		}
+
+		// Commit transaction
+		if err := m.commitTransaction(txID); err != nil {
+			klog.Errorf("Failed to commit transaction: %v", err)
+			m.deleteTransaction(txID)
+			continue
 		}
 	}
 
 	return nil
 }
 
-// HAProxy runtime API commands
+// Transaction management
 
-func (m *Manager) executeCommand(command string) (string, error) {
-	conn, err := net.DialTimeout("unix", m.socketPath, 5*time.Second)
+func (m *Manager) startTransaction() (string, error) {
+	resp, err := m.client.Post(m.apiURL+"/services/haproxy/transactions?version=1", "application/json", nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to connect to HAProxy socket: %w", err)
+		return "", err
 	}
-	defer conn.Close()
+	defer resp.Body.Close()
 
-	// Set read/write deadlines
-	conn.SetDeadline(time.Now().Add(5 * time.Second))
-
-	// Send command
-	_, err = fmt.Fprintf(conn, "%s\n", command)
-	if err != nil {
-		return "", fmt.Errorf("failed to send command: %w", err)
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("failed to start transaction: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
-	// Read response
-	scanner := bufio.NewScanner(conn)
-	var response strings.Builder
-	for scanner.Scan() {
-		response.WriteString(scanner.Text())
-		response.WriteString("\n")
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
 	}
 
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+	txID, ok := result["id"].(string)
+	if !ok {
+		return "", fmt.Errorf("transaction ID not found in response")
 	}
 
-	return response.String(), nil
+	return txID, nil
 }
 
-func (m *Manager) frontendExists(name string) (bool, error) {
-	resp, err := m.executeCommand("show stat")
+func (m *Manager) commitTransaction(txID string) error {
+	url := fmt.Sprintf("%s/services/haproxy/transactions/%s", m.apiURL, txID)
+	req, err := http.NewRequest(http.MethodPut, url, nil)
 	if err != nil {
-		return false, err
+		return err
 	}
-	return strings.Contains(resp, name), nil
-}
 
-func (m *Manager) backendExists(name string) (bool, error) {
-	resp, err := m.executeCommand("show stat")
+	resp, err := m.client.Do(req)
 	if err != nil {
-		return false, err
+		return err
 	}
-	return strings.Contains(resp, name), nil
-}
+	defer resp.Body.Close()
 
-func (m *Manager) createFrontend(name string, port int, backendName string) error {
-	// Note: HAProxy runtime API doesn't support creating frontends dynamically
-	// In a real implementation, you would either:
-	// 1. Generate a config file and reload HAProxy
-	// 2. Use a template with placeholders and reload
-	// 3. Use HAProxy Enterprise features
-	
-	// For this implementation, we'll log a warning and assume frontends are pre-configured
-	// or use a different approach
-	klog.Warningf("Frontend creation via runtime API not fully supported, assuming pre-configured or using config reload")
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to commit transaction: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
 	return nil
 }
 
-func (m *Manager) createBackend(name string) error {
-	// Similar to frontend, backend creation via runtime API is limited
-	klog.V(4).Infof("Backend %s creation requested", name)
+func (m *Manager) deleteTransaction(txID string) error {
+	url := fmt.Sprintf("%s/services/haproxy/transactions/%s", m.apiURL, txID)
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
 	return nil
 }
 
-func (m *Manager) updateBackendServers(backendName string, backends []Backend) error {
-	// First, get existing servers
-	existingServers, err := m.getBackendServers(backendName)
+// Frontend management
+
+func (m *Manager) ensureFrontend(txID, name string, port int, backendName string) error {
+	// Check if frontend exists
+	url := fmt.Sprintf("%s/services/haproxy/configuration/frontends/%s?transaction_id=%s", m.apiURL, name, txID)
+	resp, err := m.client.Get(url)
 	if err != nil {
-		klog.V(4).Infof("Backend %s may not exist yet: %v", backendName, err)
-		existingServers = []string{}
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		// Frontend exists, update if needed
+		klog.V(4).Infof("Frontend %s already exists", name)
+		return nil
+	}
+
+	// Create frontend
+	frontend := map[string]interface{}{
+		"name":            name,
+		"mode":            "tcp",
+		"default_backend": backendName,
+	}
+
+	body, err := json.Marshal(frontend)
+	if err != nil {
+		return err
+	}
+
+	url = fmt.Sprintf("%s/services/haproxy/configuration/frontends?transaction_id=%s", m.apiURL, txID)
+	resp, err = m.client.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusAccepted {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to create frontend: %s (status: %d)", string(respBody), resp.StatusCode)
+	}
+
+	// Add bind to the frontend
+	bind := map[string]interface{}{
+		"name":    "bind_1",
+		"address": "*",
+		"port":    port,
+	}
+
+	body, err = json.Marshal(bind)
+	if err != nil {
+		return err
+	}
+
+	url = fmt.Sprintf("%s/services/haproxy/configuration/binds?frontend=%s&transaction_id=%s", m.apiURL, name, txID)
+	resp, err = m.client.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusAccepted {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to create bind: %s (status: %d)", string(respBody), resp.StatusCode)
+	}
+
+	klog.V(4).Infof("Created frontend %s on port %d", name, port)
+	return nil
+}
+
+func (m *Manager) deleteFrontend(txID, name string) error {
+	url := fmt.Sprintf("%s/services/haproxy/configuration/frontends/%s?transaction_id=%s", m.apiURL, name, txID)
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete frontend: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	klog.V(4).Infof("Deleted frontend %s", name)
+	return nil
+}
+
+// Backend management
+
+func (m *Manager) ensureBackend(txID, name string) error {
+	// Check if backend exists
+	url := fmt.Sprintf("%s/services/haproxy/configuration/backends/%s?transaction_id=%s", m.apiURL, name, txID)
+	resp, err := m.client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		// Backend exists
+		klog.V(4).Infof("Backend %s already exists", name)
+		return nil
+	}
+
+	// Create backend
+	backend := map[string]interface{}{
+		"name":    name,
+		"mode":    "tcp",
+		"balance": map[string]interface{}{"algorithm": "roundrobin"},
+	}
+
+	body, err := json.Marshal(backend)
+	if err != nil {
+		return err
+	}
+
+	url = fmt.Sprintf("%s/services/haproxy/configuration/backends?transaction_id=%s", m.apiURL, txID)
+	resp, err = m.client.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusAccepted {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to create backend: %s (status: %d)", string(respBody), resp.StatusCode)
+	}
+
+	klog.V(4).Infof("Created backend %s", name)
+	return nil
+}
+
+func (m *Manager) deleteBackend(txID, name string) error {
+	url := fmt.Sprintf("%s/services/haproxy/configuration/backends/%s?transaction_id=%s", m.apiURL, name, txID)
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete backend: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	klog.V(4).Infof("Deleted backend %s", name)
+	return nil
+}
+
+// Server management
+
+func (m *Manager) updateBackendServers(txID, backendName string, backends []Backend) error {
+	// Get existing servers
+	url := fmt.Sprintf("%s/services/haproxy/configuration/servers?backend=%s&transaction_id=%s", m.apiURL, backendName, txID)
+	resp, err := m.client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var existingServers []map[string]interface{}
+	if resp.StatusCode == http.StatusOK {
+		var result map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return err
+		}
+		if data, ok := result["data"].([]interface{}); ok {
+			for _, item := range data {
+				if server, ok := item.(map[string]interface{}); ok {
+					existingServers = append(existingServers, server)
+				}
+			}
+		}
 	}
 
 	// Build desired server set
@@ -242,70 +469,126 @@ func (m *Manager) updateBackendServers(backendName string, backends []Backend) e
 	}
 
 	// Remove servers that shouldn't exist
-	for _, existingServer := range existingServers {
-		if _, shouldExist := desiredServers[existingServer]; !shouldExist {
-			m.disableServer(backendName, existingServer)
+	for _, existing := range existingServers {
+		serverName, ok := existing["name"].(string)
+		if !ok {
+			continue
+		}
+		if _, shouldExist := desiredServers[serverName]; !shouldExist {
+			m.deleteServer(txID, backendName, serverName)
 		}
 	}
 
 	// Add or update desired servers
 	for serverName, backend := range desiredServers {
-		addr := fmt.Sprintf("%s:%d", backend.Address, backend.Port)
-		
-		// Try to update existing server first
-		cmd := fmt.Sprintf("set server %s/%s addr %s port %d", backendName, serverName, backend.Address, backend.Port)
-		_, err := m.executeCommand(cmd)
-		if err != nil {
-			// Server doesn't exist, try to add it
-			// Note: Adding servers dynamically is limited in HAProxy
-			klog.V(4).Infof("Could not update server %s/%s, may need to add: %v", backendName, serverName, err)
+		// Check if server exists
+		found := false
+		for _, existing := range existingServers {
+			if name, ok := existing["name"].(string); ok && name == serverName {
+				found = true
+				break
+			}
 		}
 
-		// Enable the server
-		cmd = fmt.Sprintf("enable server %s/%s", backendName, serverName)
-		_, _ = m.executeCommand(cmd)
-		
-		klog.V(4).Infof("Updated backend server %s in %s to %s", serverName, backendName, addr)
+		if found {
+			// Update existing server
+			if err := m.updateServer(txID, backendName, serverName, backend); err != nil {
+				klog.Errorf("Failed to update server %s: %v", serverName, err)
+			}
+		} else {
+			// Create new server
+			if err := m.createServer(txID, backendName, serverName, backend); err != nil {
+				klog.Errorf("Failed to create server %s: %v", serverName, err)
+			}
+		}
 	}
 
 	return nil
 }
 
-func (m *Manager) getBackendServers(backendName string) ([]string, error) {
-	cmd := fmt.Sprintf("show servers state %s", backendName)
-	resp, err := m.executeCommand(cmd)
+func (m *Manager) createServer(txID, backendName, serverName string, backend Backend) error {
+	server := map[string]interface{}{
+		"name":    serverName,
+		"address": backend.Address,
+		"port":    backend.Port,
+		"check":   "disabled",
+	}
+
+	body, err := json.Marshal(server)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	servers := []string{}
-	lines := strings.Split(resp, "\n")
-	for _, line := range lines {
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) >= 4 {
-			servers = append(servers, fields[3]) // Server name is in field 3
-		}
+	url := fmt.Sprintf("%s/services/haproxy/configuration/servers?backend=%s&transaction_id=%s", m.apiURL, backendName, txID)
+	resp, err := m.client.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusAccepted {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to create server: %s (status: %d)", string(respBody), resp.StatusCode)
 	}
 
-	return servers, nil
-}
-
-func (m *Manager) disableServer(backendName, serverName string) error {
-	cmd := fmt.Sprintf("disable server %s/%s", backendName, serverName)
-	_, err := m.executeCommand(cmd)
-	return err
-}
-
-func (m *Manager) deleteFrontend(name string) error {
-	klog.V(4).Infof("Frontend %s deletion requested", name)
+	klog.V(4).Infof("Created server %s in backend %s at %s:%d", serverName, backendName, backend.Address, backend.Port)
 	return nil
 }
 
-func (m *Manager) deleteBackend(name string) error {
-	klog.V(4).Infof("Backend %s deletion requested", name)
+func (m *Manager) updateServer(txID, backendName, serverName string, backend Backend) error {
+	server := map[string]interface{}{
+		"name":    serverName,
+		"address": backend.Address,
+		"port":    backend.Port,
+		"check":   "disabled",
+	}
+
+	body, err := json.Marshal(server)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("%s/services/haproxy/configuration/servers/%s?backend=%s&transaction_id=%s", m.apiURL, serverName, backendName, txID)
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to update server: %s (status: %d)", string(respBody), resp.StatusCode)
+	}
+
+	klog.V(4).Infof("Updated server %s in backend %s to %s:%d", serverName, backendName, backend.Address, backend.Port)
+	return nil
+}
+
+func (m *Manager) deleteServer(txID, backendName, serverName string) error {
+	url := fmt.Sprintf("%s/services/haproxy/configuration/servers/%s?backend=%s&transaction_id=%s", m.apiURL, serverName, backendName, txID)
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete server: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	klog.V(4).Infof("Deleted server %s from backend %s", serverName, backendName)
 	return nil
 }
 
