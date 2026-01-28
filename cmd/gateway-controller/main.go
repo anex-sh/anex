@@ -53,7 +53,7 @@ func init() {
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig file (optional, uses in-cluster config if not provided)")
 	flag.StringVar(&gatewayPodName, "gateway-pod-name", "", "Name of the gateway pod")
 	flag.StringVar(&gatewayNamespace, "gateway-namespace", "", "Namespace of the gateway pod")
-	flag.StringVar(&haproxySocket, "haproxy-socket", "/var/run/haproxy/haproxy.sock", "Path to HAProxy runtime socket")
+	flag.StringVar(&haproxySocket, "haproxy-socket", "http://127.0.0.1:5555", "HAProxy Data Plane endpoint (http[s]://host:port or unix socket path)")
 	flag.IntVar(&workers, "workers", 2, "Number of worker threads for the controller")
 }
 

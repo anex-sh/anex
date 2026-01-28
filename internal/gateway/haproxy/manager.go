@@ -55,20 +55,33 @@ type Manager struct {
 }
 
 // NewManager creates a new HAProxy manager using Data Plane API
-func NewManager(socketPath string) (*Manager, error) {
-	// Create HTTP client that uses Unix socket
-	client := &http.Client{
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return net.Dial("unix", socketPath)
+func NewManager(endpoint string) (*Manager, error) {
+	// Support both Unix socket path and HTTP(S) URL endpoints
+	var client *http.Client
+	var apiBase string
+
+	if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
+		// TCP over localhost (or provided host)
+		client = &http.Client{
+			Timeout: 10 * time.Second,
+		}
+		apiBase = strings.TrimRight(endpoint, "/") + "/v2"
+	} else {
+		// Unix domain socket
+		client = &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					return net.Dial("unix", endpoint)
+				},
 			},
-		},
-		Timeout: 10 * time.Second,
+			Timeout: 10 * time.Second,
+		}
+		apiBase = "http://unix/v2"
 	}
 
 	m := &Manager{
-		socketPath: socketPath,
-		apiURL:     "http://unix/v2",
+		socketPath: endpoint,
+		apiURL:     apiBase,
 		client:     client,
 		listeners:  make(map[string][]ListenerConfig),
 	}
@@ -83,7 +96,8 @@ func NewManager(socketPath string) (*Manager, error) {
 
 // waitForAPI waits for the Data Plane API to become available
 func (m *Manager) waitForAPI() error {
-	for i := 0; i < 10; i++ {
+	deadline := time.Now().Add(60 * time.Second)
+	for time.Now().Before(deadline) {
 		resp, err := m.client.Get(m.apiURL + "/info")
 		if err == nil {
 			resp.Body.Close()
@@ -91,10 +105,13 @@ func (m *Manager) waitForAPI() error {
 				klog.Info("HAProxy Data Plane API is ready")
 				return nil
 			}
+			klog.V(4).Infof("Data Plane API not ready yet, status=%d", resp.StatusCode)
+		} else {
+			klog.V(4).Infof("Waiting for Data Plane API: %v", err)
 		}
 		time.Sleep(time.Second)
 	}
-	return fmt.Errorf("Data Plane API not available after 10 seconds")
+	return fmt.Errorf("Data Plane API not available after 60 seconds")
 }
 
 // Configure applies configuration for a specific owner (VirtualService)

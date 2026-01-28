@@ -111,8 +111,6 @@ spec:
           volumeMounts:
             - name: gateway-config
               mountPath: /gateway
-            - name: haproxy-socket
-              mountPath: /var/run/haproxy
 
         # DNS Forwarder
         - name: wg-dns
@@ -138,7 +136,7 @@ spec:
           imagePullPolicy: {{ .Values.deployment.containers.gateway.image.pullPolicy }}
           command: ["/gateway-controller"]
           args:
-            - --haproxy-socket=/var/run/haproxy/dataplane.sock
+            - --haproxy-socket=http://127.0.0.1:5555
             - --workers=2
             - -v=4
           env:
@@ -154,9 +152,6 @@ spec:
           resources:
             {{- toYaml .Values.deployment.containers.gatewayController.resources | nindent 12 }}
           {{- end }}
-          volumeMounts:
-            - name: haproxy-socket
-              mountPath: /var/run/haproxy
 
       volumes:
         - name: virtual-kubelet-config
@@ -169,5 +164,3 @@ spec:
         - name: wg-dns-corefile
           configMap:
             name: "{{ include "chart.fullname" . }}-wg-dns-corefile"
-        - name: haproxy-socket
-          emptyDir: {}

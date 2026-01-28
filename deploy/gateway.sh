@@ -26,6 +26,9 @@ global
     stats socket /var/run/haproxy/haproxy.sock mode 660 level admin expose-fd listeners
     stats timeout 30s
 
+userlist dataplaneapi
+  user admin insecure-password admin
+
 defaults
     log     global
     mode    tcp
@@ -47,20 +50,20 @@ frontend healthcheck
 EOF
 
 # Create HAProxy Data Plane API configuration
-cat > /etc/haproxy/dataplaneapi.yml <<'EOF'
+cat > /etc/haproxy/dataplaneapi.yaml <<'EOF'
 config_version: 2
 name: haproxy
 
 dataplaneapi:
-  host: 0.0.0.0
-  port: 0
-  unix_socket: /var/run/haproxy/dataplane.sock
-  unix_socket_mode: "0660"
-  user:
-    - name: admin
-      password: admin
-      insecure: true
-  
+  host: 127.0.0.1
+  port: 5555
+  log:
+    level: debug
+
+  userlist:
+    userlist: dataplaneapi
+    insecure: true
+
   transaction:
     transaction_dir: /tmp/haproxy-transactions
 
@@ -88,11 +91,23 @@ mkdir -p /etc/haproxy/ssl
 # Start HAProxy in background
 haproxy -f /etc/haproxy/haproxy.cfg &
 
-# Wait for HAProxy to start
-sleep 2
+# Wait for HAProxy runtime socket to appear
+for i in $(seq 1 30); do
+  if [ -S /var/run/haproxy/haproxy.sock ]; then
+    echo "HAProxy runtime socket is ready"
+    break
+  fi
+  sleep 1
+done
+
+if [ ! -S /var/run/haproxy/haproxy.sock ]; then
+  echo "Error: HAProxy runtime socket was not created at /var/run/haproxy/haproxy.sock within timeout"
+  exit 1
+fi
 
 # Start HAProxy Data Plane API
-/usr/local/bin/dataplaneapi -f /etc/haproxy/dataplaneapi.yml &
+/usr/local/bin/dataplaneapi -f /etc/haproxy/dataplaneapi.yaml --log-level debug &
+
 
 # Keep the script running
 wait
