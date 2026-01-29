@@ -60,11 +60,12 @@ BIN="/usr/sbin/haproxy"
 if [ -f "$PIDFILE" ] && [ -s "$PIDFILE" ]; then
   OLD="$(cat "$PIDFILE" || true)"
   if [ -n "$OLD" ]; then
-    exec "$BIN" -W -f "$CFG" -p "$PIDFILE" -sf "$OLD"
+    "$BIN" -D -f "$CFG" -p "$PIDFILE" -sf "$OLD"
+    exit $?
   fi
 fi
 
-exec "$BIN" -W -f "$CFG" -p "$PIDFILE"
+"$BIN" -D -f "$CFG" -p "$PIDFILE"
 EOS
 chmod +x /usr/local/bin/haproxy-reload.sh
 
@@ -107,8 +108,8 @@ mkdir -p /tmp/haproxy-transactions
 mkdir -p /etc/haproxy/maps
 mkdir -p /etc/haproxy/ssl
 
-# Start HAProxy in background (master-worker, with PID file)
-haproxy -W -f /etc/haproxy/haproxy.cfg -p /var/run/haproxy.pid &
+# Start HAProxy in background (daemon mode with PID file)
+haproxy -D -f /etc/haproxy/haproxy.cfg -p /var/run/haproxy.pid
 
 # Wait for HAProxy runtime socket to appear
 for i in $(seq 1 30); do

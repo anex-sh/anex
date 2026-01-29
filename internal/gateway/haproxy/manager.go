@@ -97,7 +97,7 @@ func NewManager(endpoint, username, password string) (*Manager, error) {
 			username: username,
 			password: password,
 		},
-		Timeout: 10 * time.Second,
+		Timeout: 60 * time.Second,
 	}
 
 	m := &Manager{
@@ -206,7 +206,7 @@ func (m *Manager) applyConfiguration(ownerKey string, configs []ListenerConfig) 
 		if err := m.commitTransaction(txID); err != nil {
 			klog.Errorf("Failed to commit transaction: %v", err)
 			m.deleteTransaction(txID)
-			continue
+			return fmt.Errorf("failed to commit transaction for %s: %w", frontendName, err)
 		}
 
 		klog.V(4).Infof("Successfully configured %s with %d backends", frontendName, len(config.Backends))
@@ -244,7 +244,7 @@ func (m *Manager) removeConfiguration(ownerKey string, configs []ListenerConfig)
 		if err := m.commitTransaction(txID); err != nil {
 			klog.Errorf("Failed to commit transaction: %v", err)
 			m.deleteTransaction(txID)
-			continue
+			return fmt.Errorf("failed to commit transaction for %s: %w", frontendName, err)
 		}
 	}
 
@@ -328,7 +328,8 @@ func (m *Manager) startTransaction() (string, error) {
 }
 
 func (m *Manager) commitTransaction(txID string) error {
-	url := fmt.Sprintf("%s/services/haproxy/transactions/%s?force_reload=true", m.apiURL, txID)
+	// Commit configuration changes without waiting for synchronous reload
+	url := fmt.Sprintf("%s/services/haproxy/transactions/%s", m.apiURL, txID)
 	req, err := http.NewRequest(http.MethodPut, url, nil)
 	if err != nil {
 		return err
@@ -343,6 +344,11 @@ func (m *Manager) commitTransaction(txID string) error {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("failed to commit transaction: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	// Trigger reload asynchronously to avoid long blocking commit calls
+	if err := m.triggerReload(true); err != nil {
+		return fmt.Errorf("failed to trigger reload: %w", err)
 	}
 
 	return nil
@@ -361,6 +367,26 @@ func (m *Manager) deleteTransaction(txID string) error {
 	}
 	defer resp.Body.Close()
 
+	return nil
+}
+
+ // Reload management
+
+func (m *Manager) triggerReload(force bool) error {
+	url := fmt.Sprintf("%s/services/haproxy/reloads", m.apiURL)
+	if force {
+		url = url + "?force_reload=true"
+	}
+	resp, err := m.client.Post(url, "application/json", nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to trigger reload: %s (status: %d)", string(body), resp.StatusCode)
+	}
 	return nil
 }
 
