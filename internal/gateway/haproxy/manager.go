@@ -375,9 +375,48 @@ func (m *Manager) ensureFrontend(txID, name string, port int, backendName string
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusOK {
-		// Frontend exists, update if needed
-		klog.V(4).Infof("Frontend %s already exists", name)
+	frontendExists := resp.StatusCode == http.StatusOK
+
+	if frontendExists {
+		// Frontend exists, verify and update bind if needed
+		klog.V(4).Infof("Frontend %s already exists, checking bind configuration", name)
+		
+		// Check the bind configuration
+		if err := m.ensureBind(txID, name, port); err != nil {
+			return fmt.Errorf("failed to ensure bind for existing frontend: %w", err)
+		}
+		
+		// Update default backend if needed
+		frontend := map[string]interface{}{
+			"name":            name,
+			"mode":            "tcp",
+			"default_backend": backendName,
+		}
+
+		body, err := json.Marshal(frontend)
+		if err != nil {
+			return err
+		}
+
+		url = fmt.Sprintf("%s/services/haproxy/configuration/frontends/%s?transaction_id=%s", m.apiURL, name, txID)
+		req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(body))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := m.client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+			respBody, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("failed to update frontend: %s (status: %d)", string(respBody), resp.StatusCode)
+		}
+
+		klog.V(4).Infof("Updated frontend %s", name)
 		return nil
 	}
 
@@ -406,18 +445,111 @@ func (m *Manager) ensureFrontend(txID, name string, port int, backendName string
 	}
 
 	// Add bind to the frontend
+	if err := m.ensureBind(txID, name, port); err != nil {
+		return fmt.Errorf("failed to create bind: %w", err)
+	}
+
+	klog.V(4).Infof("Created frontend %s on port %d", name, port)
+	return nil
+}
+
+// ensureBind ensures a bind exists on the frontend with the correct port
+func (m *Manager) ensureBind(txID, frontendName string, port int) error {
+	// Get existing binds for this frontend
+	url := fmt.Sprintf("%s/services/haproxy/configuration/binds?frontend=%s&transaction_id=%s", m.apiURL, frontendName, txID)
+	resp, err := m.client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var existingBinds []map[string]interface{}
+	if resp.StatusCode == http.StatusOK {
+		var result map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return err
+		}
+		if data, ok := result["data"].([]interface{}); ok {
+			for _, item := range data {
+				if bind, ok := item.(map[string]interface{}); ok {
+					existingBinds = append(existingBinds, bind)
+				}
+			}
+		}
+	}
+
+	// Check if bind_1 exists and has correct port
+	var bind1 map[string]interface{}
+	for _, bind := range existingBinds {
+		if name, ok := bind["name"].(string); ok && name == "bind_1" {
+			bind1 = bind
+			break
+		}
+	}
+
+	if bind1 != nil {
+		// Check if port is correct
+		currentPort := 0
+		if p, ok := bind1["port"].(float64); ok {
+			currentPort = int(p)
+		} else if p, ok := bind1["port"].(int); ok {
+			currentPort = p
+		}
+
+		if currentPort == port {
+			klog.V(4).Infof("Bind for frontend %s already has correct port %d", frontendName, port)
+			return nil
+		}
+
+		// Port is wrong, update it
+		klog.V(4).Infof("Updating bind port for frontend %s from %d to %d", frontendName, currentPort, port)
+		
+		bind := map[string]interface{}{
+			"name":    "bind_1",
+			"address": "*",
+			"port":    port,
+		}
+
+		body, err := json.Marshal(bind)
+		if err != nil {
+			return err
+		}
+
+		url = fmt.Sprintf("%s/services/haproxy/configuration/binds/bind_1?frontend=%s&transaction_id=%s", m.apiURL, frontendName, txID)
+		req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(body))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := m.client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+			respBody, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("failed to update bind: %s (status: %d)", string(respBody), resp.StatusCode)
+		}
+
+		klog.V(4).Infof("Updated bind for frontend %s to port %d", frontendName, port)
+		return nil
+	}
+
+	// Bind doesn't exist, create it
 	bind := map[string]interface{}{
 		"name":    "bind_1",
 		"address": "*",
 		"port":    port,
 	}
 
-	body, err = json.Marshal(bind)
+	body, err := json.Marshal(bind)
 	if err != nil {
 		return err
 	}
 
-	url = fmt.Sprintf("%s/services/haproxy/configuration/binds?frontend=%s&transaction_id=%s", m.apiURL, name, txID)
+	url = fmt.Sprintf("%s/services/haproxy/configuration/binds?frontend=%s&transaction_id=%s", m.apiURL, frontendName, txID)
 	resp, err = m.client.Post(url, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		return err
@@ -429,7 +561,7 @@ func (m *Manager) ensureFrontend(txID, name string, port int, backendName string
 		return fmt.Errorf("failed to create bind: %s (status: %d)", string(respBody), resp.StatusCode)
 	}
 
-	klog.V(4).Infof("Created frontend %s on port %d", name, port)
+	klog.V(4).Infof("Created bind for frontend %s on port %d", frontendName, port)
 	return nil
 }
 
