@@ -12,6 +12,7 @@ spec:
     metadata:
       labels:
         app: "{{ include "chart.fullname" . }}"
+        gpu-provider-gateway: "true"
     spec:
       {{- if .Values.deployment.affinity }}
       affinity:

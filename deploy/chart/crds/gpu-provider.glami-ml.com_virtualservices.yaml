@@ -58,6 +58,8 @@ spec:
                   selector:
                     additionalProperties:
                       type: string
+                    default:
+                      gpu-provider-gateway: "true"
                     description: |-
                       Selector is a label selector for identifying the gateway pod(s)
                       In practice, should select exactly one gateway pod
@@ -79,7 +81,6 @@ spec:
                           type: string
                         port:
                           description: Port is the service port number
-                          format: int32
                           maximum: 65535
                           minimum: 1
                           type: integer
@@ -95,7 +96,6 @@ spec:
                         targetPort:
                           description: TargetPort is the port number on the virtual
                             pod (must be an int)
-                          format: int32
                           maximum: 65535
                           minimum: 1
                           type: integer
@@ -130,7 +130,6 @@ spec:
                   properties:
                     gatewayPort:
                       description: GatewayPort is the allocated port on the gateway
-                      format: int32
                       type: integer
                     name:
                       description: Name is the optional name of the port
@@ -141,11 +140,9 @@ spec:
                     servicePort:
                       description: ServicePort is the port number from the service
                         spec
-                      format: int32
                       type: integer
                     targetPort:
                       description: TargetPort is the target port on the virtual pod
-                      format: int32
                       type: integer
                   required:
                   - gatewayPort
@@ -177,7 +174,6 @@ spec:
                         observedGeneration represents the .metadata.generation that the condition was set based upon.
                         For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
                         with respect to the current state of the instance.
-                      format: int64
                       minimum: 0
                       type: integer
                     reason:
@@ -217,7 +213,6 @@ spec:
               observedGeneration:
                 description: ObservedGeneration reflects the generation of the most
                   recently observed VirtualService
-                format: int64
                 type: integer
             type: object
         type: object
