@@ -60,7 +60,7 @@ const (
 
 	// Wireguard IP calculation
 	WireguardSubnetBase = "10.254.254."
-	WireguardSlotOffset = 10
+	WireguardSlotOffset = 11
 )
 
 // Controller manages VirtualService resources and configures the gateway
@@ -123,11 +123,13 @@ func NewController(
 	gatewayPodNamespace string,
 	gatewayLabels map[string]string,
 	haproxySocketPath string,
+	haproxyUsername string,
+	haproxyPassword string,
 ) (*Controller, error) {
 
 	portAllocator := portalloc.NewAllocator(DefaultPortRangeStart, DefaultPortRangeEnd)
 
-	haproxyMgr, err := haproxy.NewManager(haproxySocketPath)
+	haproxyMgr, err := haproxy.NewManager(haproxySocketPath, haproxyUsername, haproxyPassword)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HAProxy manager: %w", err)
 	}
@@ -398,25 +400,25 @@ func (c *Controller) updateVirtualService(ctx context.Context, vs *gpuv1alpha1.V
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
-	
+
 	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(vs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert VirtualService to unstructured: %w", err)
 	}
-	
+
 	unstructuredVS := &unstructured.Unstructured{Object: unstructuredObj}
-	
+
 	updated, err := c.dynamicClient.Resource(gvr).Namespace(vs.Namespace).Update(ctx, unstructuredVS, metav1.UpdateOptions{})
 	if err != nil {
 		return nil, err
 	}
-	
+
 	updatedVS := &gpuv1alpha1.VirtualService{}
 	err = runtime.DefaultUnstructuredConverter.FromUnstructured(updated.Object, updatedVS)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert unstructured to VirtualService: %w", err)
 	}
-	
+
 	return updatedVS, nil
 }
 
@@ -428,14 +430,14 @@ func (c *Controller) updateVirtualServiceStatus(ctx context.Context, vs *gpuv1al
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
-	
+
 	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(vs)
 	if err != nil {
 		return fmt.Errorf("failed to convert VirtualService to unstructured: %w", err)
 	}
-	
+
 	unstructuredVS := &unstructured.Unstructured{Object: unstructuredObj}
-	
+
 	_, err = c.dynamicClient.Resource(gvr).Namespace(vs.Namespace).UpdateStatus(ctx, unstructuredVS, metav1.UpdateOptions{})
 	return err
 }

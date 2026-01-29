@@ -137,6 +137,8 @@ spec:
           command: ["/gateway-controller"]
           args:
             - --haproxy-socket=http://127.0.0.1:5555
+            - --haproxy-username=admin
+            - --haproxy-password=admin
             - --workers=2
             - -v=4
           env:

@@ -185,6 +185,7 @@ func (c *Controller) ensurePortAllocations(vs *gpuv1alpha1.VirtualService) error
 		allocatedPorts = append(allocatedPorts, gpuv1alpha1.AllocatedPort{
 			Name:        specPort.Name,
 			ServicePort: specPort.Port,
+			// TODO: This is not correct, should be the port from the pod list - lookup: targetPort key to a GW 10000+X allocation
 			TargetPort:  specPort.TargetPort,
 			GatewayPort: int32(gatewayPort),
 			Protocol:    protocol,

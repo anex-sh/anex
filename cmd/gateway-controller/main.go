@@ -46,6 +46,8 @@ var (
 	gatewayPodName   string
 	gatewayNamespace string
 	haproxySocket    string
+	haproxyUsername  string
+	haproxyPassword  string
 	workers          int
 )
 
@@ -54,6 +56,8 @@ func init() {
 	flag.StringVar(&gatewayPodName, "gateway-pod-name", "", "Name of the gateway pod")
 	flag.StringVar(&gatewayNamespace, "gateway-namespace", "", "Namespace of the gateway pod")
 	flag.StringVar(&haproxySocket, "haproxy-socket", "http://127.0.0.1:5555", "HAProxy Data Plane endpoint (http[s]://host:port or unix socket path)")
+	flag.StringVar(&haproxyUsername, "haproxy-username", "admin", "Username for HAProxy Data Plane API basic auth")
+	flag.StringVar(&haproxyPassword, "haproxy-password", "admin", "Password for HAProxy Data Plane API basic auth")
 	flag.IntVar(&workers, "workers", 2, "Number of worker threads for the controller")
 }
 
@@ -114,7 +118,7 @@ func main() {
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
-	
+
 	dynamicInformerFactory := dynamicinformer.NewDynamicSharedInformerFactory(dynamicClient, 30*time.Second)
 	vsInformer := dynamicInformerFactory.ForResource(gvr).Informer()
 	vsLister := dynamicInformerFactory.ForResource(gvr).Lister()
@@ -144,6 +148,8 @@ func main() {
 		gatewayNamespace,
 		gatewayLabels,
 		haproxySocket,
+		haproxyUsername,
+		haproxyPassword,
 	)
 	if err != nil {
 		klog.Fatalf("Failed to create controller: %v", err)

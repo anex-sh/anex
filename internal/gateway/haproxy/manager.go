@@ -54,29 +54,50 @@ type Manager struct {
 	listeners  map[string][]ListenerConfig // owner key -> listener configs
 }
 
+ // authRoundTripper adds Basic Auth to every request when username is set
+type authRoundTripper struct {
+	base     http.RoundTripper
+	username string
+	password string
+}
+
+func (t authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t.username != "" {
+		// Clone the request to avoid mutating caller's request
+		r := req.Clone(req.Context())
+		r.SetBasicAuth(t.username, t.password)
+		return t.base.RoundTrip(r)
+	}
+	return t.base.RoundTrip(req)
+}
+
 // NewManager creates a new HAProxy manager using Data Plane API
-func NewManager(endpoint string) (*Manager, error) {
+func NewManager(endpoint, username, password string) (*Manager, error) {
 	// Support both Unix socket path and HTTP(S) URL endpoints
-	var client *http.Client
+	var baseTransport http.RoundTripper
 	var apiBase string
 
 	if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
 		// TCP over localhost (or provided host)
-		client = &http.Client{
-			Timeout: 10 * time.Second,
-		}
+		baseTransport = http.DefaultTransport
 		apiBase = strings.TrimRight(endpoint, "/") + "/v2"
 	} else {
 		// Unix domain socket
-		client = &http.Client{
-			Transport: &http.Transport{
-				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-					return net.Dial("unix", endpoint)
-				},
+		baseTransport = &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return net.Dial("unix", endpoint)
 			},
-			Timeout: 10 * time.Second,
 		}
 		apiBase = "http://unix/v2"
+	}
+
+	client := &http.Client{
+		Transport: authRoundTripper{
+			base:     baseTransport,
+			username: username,
+			password: password,
+		},
+		Timeout: 10 * time.Second,
 	}
 
 	m := &Manager{
@@ -230,10 +251,59 @@ func (m *Manager) removeConfiguration(ownerKey string, configs []ListenerConfig)
 	return nil
 }
 
-// Transaction management
+ // Transaction management
+
+func (m *Manager) getConfigVersion() (int, error) {
+	url := fmt.Sprintf("%s/services/haproxy/configuration/version", m.apiURL)
+	resp, err := m.client.Get(url)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("failed to get config version: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	var v interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		return 0, err
+	}
+
+	switch t := v.(type) {
+	case float64:
+		return int(t), nil
+	case map[string]interface{}:
+		if val, ok := t["version"]; ok {
+			switch vv := val.(type) {
+			case float64:
+				return int(vv), nil
+			case int:
+				return vv, nil
+			}
+		}
+		if val, ok := t["_version"]; ok {
+			switch vv := val.(type) {
+			case float64:
+				return int(vv), nil
+			case int:
+				return vv, nil
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("unable to parse configuration version")
+}
 
 func (m *Manager) startTransaction() (string, error) {
-	resp, err := m.client.Post(m.apiURL+"/services/haproxy/transactions?version=1", "application/json", nil)
+	version, err := m.getConfigVersion()
+	if err != nil {
+		return "", fmt.Errorf("failed to determine configuration version: %w", err)
+	}
+
+	txURL := fmt.Sprintf("%s/services/haproxy/transactions?version=%d", m.apiURL, version)
+	resp, err := m.client.Post(txURL, "application/json", nil)
 	if err != nil {
 		return "", err
 	}
