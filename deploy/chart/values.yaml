@@ -20,13 +20,13 @@ deployment:
         tag: "v0.4.0"
         pullPolicy: Always
 
-      resources:
-        requests:
-          cpu: "0.5"
-          memory: "512Mi"
-        limits:
-          cpu: "0.5"
-          memory: "512Mi"
+      resources: {}
+#        requests:
+#          cpu: "0.5"
+#          memory: "512Mi"
+#        limits:
+#          cpu: "0.5"
+#          memory: "512Mi"
 
     gateway:
       image:
@@ -35,22 +35,22 @@ deployment:
         pullPolicy: Always
 
       # TODO: Remove requirements
-      resources:
-        requests:
-          cpu: "0.5"
-          memory: "256Mi"
-        limits:
-          cpu: "0.5"
-          memory: "256Mi"
+      resources: {}
+#        requests:
+#          cpu: "0.5"
+#          memory: "256Mi"
+#        limits:
+#          cpu: "0.5"
+#          memory: "256Mi"
 
-    gatewayController:
-      resources:
-        requests:
-          cpu: "0.5"
-          memory: "256Mi"
-        limits:
-          cpu: "0.5"
-          memory: "256Mi"
+    gatewayController: {}
+#      resources:
+#        requests:
+#          cpu: "0.5"
+#          memory: "256Mi"
+#        limits:
+#          cpu: "0.5"
+#          memory: "256Mi"
 
 
 # Application configuration
