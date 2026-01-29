@@ -296,10 +296,20 @@ func (c *Controller) configureHAProxy(ctx context.Context, vs *gpuv1alpha1.Virtu
 		// Build backend servers from matching pods
 		backends := []haproxy.Backend{}
 		for _, pod := range pods {
+			// Calculate the backend port using the Wireproxy tunnel formula:
+			// ListenPort = 10000 + proxySlotID * 100 + portID
+			// where portID is the index of the target port in the sorted container ports
+			backendPort, err := calculateBackendPort(pod, allocPort.TargetPort)
+			if err != nil {
+				klog.Warningf("Failed to calculate backend port for pod %s/%s, target port %d: %v. Skipping pod.", 
+					pod.Namespace, pod.Name, allocPort.TargetPort, err)
+				continue
+			}
+
 			backends = append(backends, haproxy.Backend{
 				Name:    fmt.Sprintf("%s-%s", pod.Namespace, pod.Name),
 				Address: pod.WireguardIP,
-				Port:    int(allocPort.TargetPort),
+				Port:    backendPort,
 			})
 		}
 
@@ -318,6 +328,29 @@ func (c *Controller) configureHAProxy(ctx context.Context, vs *gpuv1alpha1.Virtu
 
 	klog.V(4).Infof("Configured HAProxy for VirtualService %s with %d listeners", vsKey, len(configs))
 	return nil
+}
+
+// calculateBackendPort calculates the Wireproxy tunnel listen port for a given target port
+// Formula: ListenPort = 10000 + proxySlotID * 100 + portID
+// where portID is the index of the target port in the sorted container ports
+func calculateBackendPort(pod *VirtualPodInfo, targetPort int32) (int, error) {
+	// Find the portID (index) of the targetPort in the sorted container ports
+	portID := -1
+	for i, port := range pod.ContainerPorts {
+		if port == targetPort {
+			portID = i
+			break
+		}
+	}
+
+	if portID == -1 {
+		return 0, fmt.Errorf("target port %d not found in pod's container ports %v", targetPort, pod.ContainerPorts)
+	}
+
+	// Apply the formula: ListenPort = 10000 + proxySlotID * 100 + portID
+	listenPort := 10000 + pod.ProxySlotID*100 + portID
+
+	return listenPort, nil
 }
 
 func (c *Controller) handleVirtualServiceFinalization(ctx context.Context, vs *gpuv1alpha1.VirtualService) error {

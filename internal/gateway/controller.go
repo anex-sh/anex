@@ -19,6 +19,7 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -102,13 +103,14 @@ type Controller struct {
 
 // VirtualPodInfo holds information about a virtual pod
 type VirtualPodInfo struct {
-	UID         string
-	Namespace   string
-	Name        string
-	Labels      map[string]string
-	ProxySlotID int
-	WireguardIP string
-	Ready       bool
+	UID            string
+	Namespace      string
+	Name           string
+	Labels         map[string]string
+	ProxySlotID    int
+	WireguardIP    string
+	Ready          bool
+	ContainerPorts []int32 // Sorted container ports from pod spec
 }
 
 // NewController creates a new Gateway controller
@@ -287,15 +289,42 @@ func (c *Controller) updateVirtualPodCache(pod *corev1.Pod) {
 	// For now, assume all pods are ready (as per requirements)
 	ready := pod.Status.Phase == corev1.PodRunning
 
+	// Extract and sort container ports from pod spec
+	containerPorts := extractContainerPorts(pod)
+
 	c.virtualPods[key] = &VirtualPodInfo{
-		UID:         string(pod.UID),
-		Namespace:   pod.Namespace,
-		Name:        pod.Name,
-		Labels:      pod.Labels,
-		ProxySlotID: proxySlotID,
-		WireguardIP: wireguardIP,
-		Ready:       ready,
+		UID:            string(pod.UID),
+		Namespace:      pod.Namespace,
+		Name:           pod.Name,
+		Labels:         pod.Labels,
+		ProxySlotID:    proxySlotID,
+		WireguardIP:    wireguardIP,
+		Ready:          ready,
+		ContainerPorts: containerPorts,
 	}
+}
+
+// extractContainerPorts extracts all container ports from a pod spec and returns them sorted
+func extractContainerPorts(pod *corev1.Pod) []int32 {
+	portsMap := make(map[int32]bool)
+
+	// Collect all unique ports from all containers
+	for _, container := range pod.Spec.Containers {
+		for _, port := range container.Ports {
+			portsMap[port.ContainerPort] = true
+		}
+	}
+
+	// Convert to sorted slice
+	ports := make([]int32, 0, len(portsMap))
+	for port := range portsMap {
+		ports = append(ports, port)
+	}
+	sort.Slice(ports, func(i, j int) bool {
+		return ports[i] < ports[j]
+	})
+
+	return ports
 }
 
 func (c *Controller) enqueueVirtualServicesForPod(pod *corev1.Pod) {
