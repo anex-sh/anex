@@ -328,8 +328,7 @@ func (m *Manager) startTransaction() (string, error) {
 }
 
 func (m *Manager) commitTransaction(txID string) error {
-	// Commit configuration changes without waiting for synchronous reload
-	url := fmt.Sprintf("%s/services/haproxy/transactions/%s", m.apiURL, txID)
+	url := fmt.Sprintf("%s/services/haproxy/transactions/%s?force_reload=true", m.apiURL, txID)
 	req, err := http.NewRequest(http.MethodPut, url, nil)
 	if err != nil {
 		return err
@@ -344,11 +343,6 @@ func (m *Manager) commitTransaction(txID string) error {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("failed to commit transaction: %s (status: %d)", string(body), resp.StatusCode)
-	}
-
-	// Trigger reload asynchronously to avoid long blocking commit calls
-	if err := m.triggerReload(true); err != nil {
-		return fmt.Errorf("failed to trigger reload: %w", err)
 	}
 
 	return nil
