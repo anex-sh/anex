@@ -17,7 +17,7 @@ deployment:
     virtualKubelet:
       image:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet"
-        tag: "v0.3.1"
+        tag: "v0.4.0"
         pullPolicy: Always
 
       resources:
@@ -31,8 +31,7 @@ deployment:
     gateway:
       image:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/gateway"
-        # tag: "v0.3.1"
-        tag: "gateway-exp"
+        tag: "v0.4.0"
         pullPolicy: Always
 
       # TODO: Remove requirements
@@ -62,6 +61,7 @@ appConfig:
     clusterUUID: ""
 
   cloudProvider:
+    mock: false
     vastAI:
       apiKey: ""
 

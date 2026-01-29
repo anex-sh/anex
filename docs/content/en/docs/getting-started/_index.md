@@ -77,8 +77,8 @@ Before you begin, ensure you have:
     helm upgrade --install gpu-provider \
       --namespace gpu-provider --create-namespace \
       -f quickstart.values.yaml \
-      oci://public.ecr.aws/m4v1f8q5/gpu-provider/helm
-      --version 0.3.1
+      oci://public.ecr.aws/m4v1f8q5/gpu-provider/helm \
+      --version 0.4.0
     ```
 
 4. When provider is up and running you will see a new node in your cluster
