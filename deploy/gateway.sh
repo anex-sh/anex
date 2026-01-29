@@ -49,6 +49,25 @@ frontend healthcheck
 # by the gateway-controller using the HAProxy Data Plane API
 EOF
 
+# Write HAProxy reload helper script
+cat > /usr/local/bin/haproxy-reload.sh <<'EOS'
+#!/bin/sh
+set -e
+PIDFILE="/var/run/haproxy.pid"
+CFG="/etc/haproxy/haproxy.cfg"
+BIN="/usr/sbin/haproxy"
+
+if [ -f "$PIDFILE" ] && [ -s "$PIDFILE" ]; then
+  OLD="$(cat "$PIDFILE" || true)"
+  if [ -n "$OLD" ]; then
+    exec "$BIN" -W -f "$CFG" -p "$PIDFILE" -sf "$OLD"
+  fi
+fi
+
+exec "$BIN" -W -f "$CFG" -p "$PIDFILE"
+EOS
+chmod +x /usr/local/bin/haproxy-reload.sh
+
 # Create HAProxy Data Plane API configuration
 cat > /etc/haproxy/dataplaneapi.yaml <<'EOF'
 config_version: 2
@@ -75,9 +94,9 @@ haproxy:
   config_file: /etc/haproxy/haproxy.cfg
   haproxy_bin: /usr/sbin/haproxy
   reload:
-    reload_delay: 5
-    reload_cmd: kill -SIGUSR2 1
-    restart_cmd: kill -SIGUSR2 1
+    reload_delay: 0
+    reload_cmd: /usr/local/bin/haproxy-reload.sh
+    restart_cmd: /usr/local/bin/haproxy-reload.sh
   
   master_runtime: /var/run/haproxy/haproxy.sock
 EOF
@@ -88,8 +107,8 @@ mkdir -p /tmp/haproxy-transactions
 mkdir -p /etc/haproxy/maps
 mkdir -p /etc/haproxy/ssl
 
-# Start HAProxy in background
-haproxy -f /etc/haproxy/haproxy.cfg &
+# Start HAProxy in background (master-worker, with PID file)
+haproxy -W -f /etc/haproxy/haproxy.cfg -p /var/run/haproxy.pid &
 
 # Wait for HAProxy runtime socket to appear
 for i in $(seq 1 30); do

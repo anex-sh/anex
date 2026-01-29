@@ -328,7 +328,7 @@ func (m *Manager) startTransaction() (string, error) {
 }
 
 func (m *Manager) commitTransaction(txID string) error {
-	url := fmt.Sprintf("%s/services/haproxy/transactions/%s", m.apiURL, txID)
+	url := fmt.Sprintf("%s/services/haproxy/transactions/%s?force_reload=true", m.apiURL, txID)
 	req, err := http.NewRequest(http.MethodPut, url, nil)
 	if err != nil {
 		return err
