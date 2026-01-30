@@ -52,6 +52,9 @@ spec:
             description: VirtualServiceSpec defines the desired state of VirtualService
             properties:
               gateway:
+                default:
+                  selector:
+                    gpu-provider-gateway: "true"
                 description: Gateway identifies which gateway pod(s) should handle
                   this VirtualService
                 properties:
@@ -115,7 +118,6 @@ spec:
                 - selector
                 type: object
             required:
-            - gateway
             - service
             type: object
           status:
