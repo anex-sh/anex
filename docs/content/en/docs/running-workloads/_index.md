@@ -6,11 +6,7 @@ description: >
   Guide to deploying workload on a virtual nodes
 ---
 
-## VastAI
-
-Currently the only supported cloud provider. More are to come.
-
-### Networking
+## Networking
 
 Since VastAI does not allow us to run Wireguard in kernel space the VPN is done by Wireproxy in user space. This means all traffic to the cluster needs to go either over HTTP proxy or through tunnel.
 
@@ -20,26 +16,26 @@ TCP Tunnels can be set by setting ENV variables in format `GW_TUNNEL_<port-numbe
 
 
 
-### Machine Selection
+## Machine Selection
 
 You can control machine selection by adding annotations to your Pod specification. All annotations use the prefix `gpu-provider.glami.cz/`.
 
-#### Boolean Filters
+#### Machine Quality
 
-| Annotation | Description | Example |
-|------------|-------------|---------|
-| `verified-only` | Only select verified machines | `gpu-provider.glami.cz/verified-only: "true"` |
-| `datacenter-only` | Only select datacenter machines (no consumer hardware) | `gpu-provider.glami.cz/datacenter-only: "true"` |
+|  | |      |                                                 |
+|------------|------------------------|------|-------------------------------------------------|
+| `verified-only` | Only select verified machines                          | `bool` | `gpu-provider.glami.cz/verified-only: "true"`   |
+| `datacenter-only` | Only select datacenter machines (no consumer hardware) | `bool` | `gpu-provider.glami.cz/datacenter-only: "true"` |
 
-#### Region Filters
+#### Allowed Regions
 
-| Annotation | Description | Valid Values | Example |
-|------------|-------------|--------------|---------|
+|  |  | |  |
+|------------|-------------|-------|---------|
 | `region` | Specify allowed regions (comma-separated) | `europe`, `north-america`, `asia-pacific`, `africa`, `south-america`, `oceania` | `gpu-provider.glami.cz/region: "europe,north-america"` |
 
-#### List Filters
+#### GPU Names and SM
 
-| Annotation | Description | Example |
+|  |  |  |
 |------------|-------------|---------|
 | `gpu-names` | Comma-separated list of allowed GPU names | `gpu-provider.glami.cz/gpu-names: "RTX 4090,RTX 3090"` |
 | `compute-cap` | Comma-separated list of allowed CUDA compute capabilities | `gpu-provider.glami.cz/compute-cap: "8.6,8.9"` |
@@ -53,60 +49,23 @@ All numeric filters support three variants:
 
 **Note:** If an exact value is specified, min/max values for that field are ignored.
 
-| Annotation | Description | Unit | Example |
+|  |  |  |  |
 |------------|-------------|------|---------|
 | `gpu-count` | Number of GPUs | count | `gpu-provider.glami.cz/gpu-count: "2"` |
-| `gpu-count-min` | Minimum number of GPUs | count | `gpu-provider.glami.cz/gpu-count-min: "1"` |
-| `gpu-count-max` | Maximum number of GPUs | count | `gpu-provider.glami.cz/gpu-count-max: "4"` |
 | `vram` | VRAM per GPU | MB | `gpu-provider.glami.cz/vram: "24576"` |
-| `vram-min` | Minimum VRAM per GPU | MB | `gpu-provider.glami.cz/vram-min: "16384"` |
-| `vram-max` | Maximum VRAM per GPU | MB | `gpu-provider.glami.cz/vram-max: "49152"` |
 | `vram-total` | Total VRAM across all GPUs | MB | `gpu-provider.glami.cz/vram-total: "49152"` |
-| `vram-total-min` | Minimum total VRAM | MB | `gpu-provider.glami.cz/vram-total-min: "32768"` |
-| `vram-total-max` | Maximum total VRAM | MB | `gpu-provider.glami.cz/vram-total-max: "98304"` |
 | `vram-bandwidth` | GPU memory bandwidth | GB/s | `gpu-provider.glami.cz/vram-bandwidth: "900.0"` |
-| `vram-bandwidth-min` | Minimum memory bandwidth | GB/s | `gpu-provider.glami.cz/vram-bandwidth-min: "500.0"` |
-| `vram-bandwidth-max` | Maximum memory bandwidth | GB/s | `gpu-provider.glami.cz/vram-bandwidth-max: "1000.0"` |
 | `tflops` | Total TFLOPS | TFLOPS | `gpu-provider.glami.cz/tflops: "82.0"` |
-| `tflops-min` | Minimum TFLOPS | TFLOPS | `gpu-provider.glami.cz/tflops-min: "50.0"` |
-| `tflops-max` | Maximum TFLOPS | TFLOPS | `gpu-provider.glami.cz/tflops-max: "100.0"` |
 | `cuda` | CUDA version | version | `gpu-provider.glami.cz/cuda: "12.1"` |
-| `cuda-min` | Minimum CUDA version | version | `gpu-provider.glami.cz/cuda-min: "11.8"` |
-| `cuda-max` | Maximum CUDA version | version | `gpu-provider.glami.cz/cuda-max: "12.4"` |
-
-#### CPU and RAM Filters
-
-| Annotation | Description | Unit | Example |
-|------------|-------------|------|---------|
 | `cpu` | Number of CPU cores | cores | `gpu-provider.glami.cz/cpu: "8"` |
-| `cpu-min` | Minimum CPU cores | cores | `gpu-provider.glami.cz/cpu-min: "4"` |
-| `cpu-max` | Maximum CPU cores | cores | `gpu-provider.glami.cz/cpu-max: "16"` |
 | `ram` | System RAM | MB | `gpu-provider.glami.cz/ram: "32768"` |
-| `ram-min` | Minimum system RAM | MB | `gpu-provider.glami.cz/ram-min: "16384"` |
-| `ram-max` | Maximum system RAM | MB | `gpu-provider.glami.cz/ram-max: "65536"` |
-
-#### Price Filters
-
-| Annotation | Description | Unit | Example |
-|------------|-------------|------|---------|
 | `price` | Exact price per hour | USD/hour | `gpu-provider.glami.cz/price: "0.50"` |
-| `price-min` | Minimum price per hour | USD/hour | `gpu-provider.glami.cz/price-min: "0.10"` |
-| `price-max` | Maximum price per hour | USD/hour | `gpu-provider.glami.cz/price-max: "1.00"` |
-
-#### Network Speed Filters
-
-| Annotation | Description | Unit | Example |
-|------------|-------------|------|---------|
 | `upload-speed` | Upload speed | Mbps | `gpu-provider.glami.cz/upload-speed: "1000"` |
-| `upload-speed-min` | Minimum upload speed | Mbps | `gpu-provider.glami.cz/upload-speed-min: "500"` |
-| `upload-speed-max` | Maximum upload speed | Mbps | `gpu-provider.glami.cz/upload-speed-max: "10000"` |
 | `download-speed` | Download speed | Mbps | `gpu-provider.glami.cz/download-speed: "1000"` |
-| `download-speed-min` | Minimum download speed | Mbps | `gpu-provider.glami.cz/download-speed-min: "500"` |
-| `download-speed-max` | Maximum download speed | Mbps | `gpu-provider.glami.cz/download-speed-max: "10000"` |
 
-#### VastAI-Specific Filters
+##### VastAI-Specific Filters
 
-| Annotation | Description | Unit | Example |
+|  |  |  |  |
 |------------|-------------|------|---------|
 | `vastai-dlperf` | VastAI DLPerf benchmark score | score | `gpu-provider.glami.cz/vastai-dlperf: "100.0"` |
 | `vastai-dlperf-min` | Minimum DLPerf score | score | `gpu-provider.glami.cz/vastai-dlperf-min: "50.0"` |
