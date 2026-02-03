@@ -45,7 +45,7 @@ func (a *Agent) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if a.Command == "" {
+	if a.Command == "" && len(a.Argv) == 0 {
 		respondJSON(w, http.StatusBadRequest, map[string]any{"message": "no command configured"})
 		return
 	}

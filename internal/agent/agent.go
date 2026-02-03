@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mattn/go-shellwords"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -26,6 +28,7 @@ const (
 // Agent represents the container agent that manages a single child process
 type Agent struct {
 	Command                       string
+	Argv                          []string
 	Port                          int
 	AuthToken                     string
 	EnablePromtail                bool
@@ -308,20 +311,24 @@ func applyEnvOverrides(env []string) []string {
 
 // startChildProcess starts the child process specified by the Command field
 func (a *Agent) startChildProcess() error {
-	if a.Command == "" {
-		return fmt.Errorf("no command specified")
+	var argv []string
+	if len(a.Argv) > 0 {
+		argv = a.Argv
+	} else {
+		if a.Command == "" {
+			return fmt.Errorf("no command specified")
+		}
+		parsed, err := shellwords.Parse(a.Command)
+		if err != nil || len(parsed) == 0 {
+			return fmt.Errorf("invalid command: %w", err)
+		}
+		argv = parsed
 	}
 
-	// Parse the command string into command and arguments
-	parts := strings.Fields(a.Command)
-	if len(parts) == 0 {
-		return fmt.Errorf("empty command")
-	}
-
-	cmdPath := parts[0]
+	cmdPath := argv[0]
 	var args []string
-	if len(parts) > 1 {
-		args = parts[1:]
+	if len(argv) > 1 {
+		args = argv[1:]
 	}
 
 	// Create the command

@@ -170,6 +170,23 @@ type ProxyTunnel struct {
 	Address       string
 }
 
+// shellQuote single-quotes a string for safe bash embedding, handling embedded single quotes.
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+// joinShellArgs escapes and joins argv for safe inclusion after `--` in a shell command line.
+func joinShellArgs(args []string) string {
+	escaped := make([]string, 0, len(args))
+	for _, a := range args {
+		escaped = append(escaped, shellQuote(a))
+	}
+	return strings.Join(escaped, " ")
+}
+
 func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bool) (machineID string, err error) {
 	logger := log.G(ctx)
 	logger.Infof("Attempting to provision machine from %d candidates", len(candidatesID))
@@ -188,18 +205,34 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 	sort.Ints(ports)
 
 	// TODO: Do not hardcode URLs
-	agentURL := "https://glami-gpu-provider.glami-ml.com/container_agent_v0.2.0?token=cSrYDWSRTawnkIup"
+	agentURL := "https://glami-gpu-provider.glami-ml.com/container_agent_v0.4.0?token=cSrYDWSRTawnkIup"
 	wireproxyURL := "https://glami-gpu-provider.glami-ml.com/wireproxy?token=cSrYDWSRTawnkIup"
 	promtailURL := "https://glami-gpu-provider.glami-ml.com/promtail?token=cSrYDWSRTawnkIup"
 
-	containerCommand := strings.Join(pod.Spec.Containers[0].Command, " ")
-	commandWrapper := fmt.Sprintf("/container_agent run -p 8080 -c \"%s\"", containerCommand)
+	// Build argv from Pod spec:
+	// - If Command is provided, use it as argv[0..] and append Args
+	// - If Command is empty but Args are provided, fallback to executing via shell to preserve intent
+	//   (we cannot know the image ENTRYPOINT here)
+	var argv []string
+	if len(pod.Spec.Containers) > 0 {
+		cn := pod.Spec.Containers[0]
+		if len(cn.Command) > 0 {
+			argv = append(argv, cn.Command...)
+			argv = append(argv, cn.Args...)
+		} else if len(cn.Args) > 0 {
+			argv = []string{"/bin/sh", "-lc", strings.Join(cn.Args, " ")}
+		}
+	}
+	// Compose container agent invocation with flags, then `--` followed by safely-quoted argv
+	commandWrapper := fmt.Sprintf("/container_agent run -p 8080")
 	if proxy.Enabled {
 		commandWrapper += " --proxy"
 	}
-
 	if promtail {
 		commandWrapper += " --promtail"
+	}
+	if len(argv) > 0 {
+		commandWrapper += " -- " + joinShellArgs(argv)
 	}
 
 	var proxyTunnels []ProxyTunnel

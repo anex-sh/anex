@@ -104,7 +104,9 @@ EOF
 export PIP_PROXY="http://127.0.0.1:3128"
 unset AWS_WEB_IDENTITY_TOKEN_FILE
 
+{{- if .Workdir }}
 cd {{ .Workdir }}
+{{- end }}
 
 curl {{ .WireproxyURL }} -o /usr/bin/wireproxy
 curl {{ .PromtailURL }} -o /usr/bin/promtail
