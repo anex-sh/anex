@@ -8,6 +8,11 @@ deployment:
   serviceAccount:
     annotations: {}
 
+  tls:
+    cert: ""
+    key: ""
+    caCert: ""
+
   gateway:
     class: "" # enum: [node-port | aws-eks]
     domain: ""
@@ -88,3 +93,12 @@ appConfig:
   promtail:
     enable: false
     clients: []
+
+  # TLS configuration
+  # - cert, key, caCert should be base64-encoded data (no line breaks)
+  # - If all three are provided, a Secret named "<release>-tls" will be created automatically
+  # - The paths below are used by the Virtual Kubelet and should match the mount location
+  tls:
+    certPath: "/etc/kubelet-tls/tls.crt"
+    keyPath: "/etc/kubelet-tls/tls.key"
+    caCertPath: "/etc/kubelet-tls/ca.crt"

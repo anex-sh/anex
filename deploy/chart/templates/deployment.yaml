@@ -87,6 +87,8 @@ spec:
               readOnly: true
             - name: gateway-config
               mountPath: /gateway
+            - name: virtual-kubelet-tls
+              mountPath: /etc/kubelet-tls
 
         # Gateway
         - name: gateway
@@ -160,6 +162,9 @@ spec:
         - name: virtual-kubelet-config
           configMap:
             name: "{{ include "chart.fullname" . }}-virtual-kubelet-config"
+        - name: virtual-kubelet-tls
+          secret:
+            secretName: "{{ include "chart.fullname" . }}-tls"
         - name: gateway-config
           emptyDir:
             sizeLimit: 500Mi

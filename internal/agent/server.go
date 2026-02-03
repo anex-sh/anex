@@ -171,7 +171,7 @@ func (a *Agent) handleLogs(w http.ResponseWriter, r *http.Request) {
 	follow := query.Get("follow") == "true"
 	tailLines := query.Get("tail")
 
-	logPath := "/var/log/container/main.log"
+	logPath := "/var/log/agent/main.log"
 	
 	// Check if log file exists
 	if _, err := os.Stat(logPath); os.IsNotExist(err) {
