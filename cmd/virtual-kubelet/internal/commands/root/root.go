@@ -132,42 +132,39 @@ func runRootCommand(ctx context.Context, s *provider.Store, c Opts) error {
 		return err
 	}
 
-	// Prepare node options
-	nodeOpts := []nodeutil.NodeOpt{
+	cm, err := nodeutil.NewNode(config.VirtualNode.NodeName, newProvider,
 		nodeutil.WithClient(clientSet),
 		setAuth(config.VirtualNode.NodeName, apiConfig),
-	}
+		func(cfg *nodeutil.NodeConfig) error {
+			cfg.KubeconfigPath = c.KubeConfigPath
+			cfg.Handler = mux
+			cfg.InformerResyncPeriod = c.InformerResyncPeriod
 
-	// Enable TLS if configured
-	if config.TLS.CertPath != "" && config.TLS.KeyPath != "" {
-		nodeOpts = append(nodeOpts, nodeutil.WithTLSConfig(
-			nodeutil.WithKeyPairFromPath(config.TLS.CertPath, config.TLS.KeyPath),
-			maybeCA(config.TLS.CACertPath),
-		))
-	}
+			if taint != nil {
+				cfg.NodeSpec.Spec.Taints = append(cfg.NodeSpec.Spec.Taints, *taint)
+			}
+			cfg.NodeSpec.Status.NodeInfo.Architecture = runtime.GOARCH
+			cfg.NodeSpec.Status.NodeInfo.OperatingSystem = c.OperatingSystem
 
-	nodeOpts = append(nodeOpts, nodeutil.AttachProviderRoutes(mux))
+			cfg.HTTPListenAddr = apiConfig.Addr
+			cfg.StreamCreationTimeout = apiConfig.StreamCreationTimeout
+			cfg.StreamIdleTimeout = apiConfig.StreamIdleTimeout
+			cfg.DebugHTTP = true
 
-	cm, err := nodeutil.NewNode(config.VirtualNode.NodeName, newProvider, func(cfg *nodeutil.NodeConfig) error {
-		cfg.KubeconfigPath = c.KubeConfigPath
-		cfg.Handler = mux
-		cfg.InformerResyncPeriod = c.InformerResyncPeriod
+			cfg.NumWorkers = c.PodSyncWorkers
 
-		if taint != nil {
-			cfg.NodeSpec.Spec.Taints = append(cfg.NodeSpec.Spec.Taints, *taint)
-		}
-		cfg.NodeSpec.Status.NodeInfo.Architecture = runtime.GOARCH
-		cfg.NodeSpec.Status.NodeInfo.OperatingSystem = c.OperatingSystem
+			// Enable TLS if configured
+			if config.TLS.CertPath != "" && config.TLS.KeyPath != "" {
+				return nodeutil.WithTLSConfig(
+					nodeutil.WithKeyPairFromPath(config.TLS.CertPath, config.TLS.KeyPath),
+					maybeCA(config.TLS.CACertPath),
+				)(cfg)
+			}
 
-		cfg.HTTPListenAddr = apiConfig.Addr
-		cfg.StreamCreationTimeout = apiConfig.StreamCreationTimeout
-		cfg.StreamIdleTimeout = apiConfig.StreamIdleTimeout
-		cfg.DebugHTTP = true
-
-		cfg.NumWorkers = c.PodSyncWorkers
-
-		return nil
-	}, nodeOpts...)
+			return nil
+		},
+		nodeutil.AttachProviderRoutes(mux),
+	)
 	if err != nil {
 		return err
 	}
