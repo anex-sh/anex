@@ -205,7 +205,7 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 	sort.Ints(ports)
 
 	// TODO: Do not hardcode URLs
-	agentURL := "https://glami-gpu-provider.glami-ml.com/container_agent_v0.4.0?token=cSrYDWSRTawnkIup"
+	agentURL := "https://glami-gpu-provider.glami-ml.com/container_agent_v0.4.2?token=cSrYDWSRTawnkIup"
 	wireproxyURL := "https://glami-gpu-provider.glami-ml.com/wireproxy?token=cSrYDWSRTawnkIup"
 	promtailURL := "https://glami-gpu-provider.glami-ml.com/promtail?token=cSrYDWSRTawnkIup"
 
