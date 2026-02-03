@@ -80,6 +80,14 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
+            {{- if and .Values.deployment.tls.cert .Values.deployment.tls.key .Values.deployment.tls.caCert }}
+            - name: TLS_CERT_PATH
+              value: "/etc/kubelet-tls/tls.crt"
+            - name: TLS_KEY_PATH
+              value: "/etc/kubelet-tls/tls.key"
+            - name: TLS_CA_CERT_PATH
+              value: "/etc/kubelet-tls/ca.crt"
+            {{- end }}
           volumeMounts:
             - name: virtual-kubelet-config
               mountPath: /virtual-kubelet-config.yaml
@@ -87,8 +95,10 @@ spec:
               readOnly: true
             - name: gateway-config
               mountPath: /gateway
+            {{- if and .Values.deployment.tls.cert .Values.deployment.tls.key .Values.deployment.tls.caCert }}
             - name: virtual-kubelet-tls
               mountPath: /etc/kubelet-tls
+            {{- end }}
 
         # Gateway
         - name: gateway
@@ -162,9 +172,11 @@ spec:
         - name: virtual-kubelet-config
           configMap:
             name: "{{ include "chart.fullname" . }}-virtual-kubelet-config"
+        {{- if and .Values.deployment.tls.cert .Values.deployment.tls.key .Values.deployment.tls.caCert }}
         - name: virtual-kubelet-tls
           secret:
             secretName: "{{ include "chart.fullname" . }}-tls"
+        {{- end }}
         - name: gateway-config
           emptyDir:
             sizeLimit: 500Mi

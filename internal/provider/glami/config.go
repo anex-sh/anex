@@ -216,6 +216,17 @@ func (c *ProviderConfig) overrideWithEnv() {
 		c.Promtail.Enable = val == "true"
 	}
 
+	// TLS
+	if val := os.Getenv(getEnvWithPrefix("tls", "certPath")); val != "" {
+		c.TLS.CertPath = val
+	}
+	if val := os.Getenv(getEnvWithPrefix("tls", "keyPath")); val != "" {
+		c.TLS.KeyPath = val
+	}
+	if val := os.Getenv(getEnvWithPrefix("tls", "caCertPath")); val != "" {
+		c.TLS.CACertPath = val
+	}
+
 	// AgentAuthToken
 	if val := os.Getenv(getEnvWithPrefix("agentAuthToken")); val != "" {
 		c.AgentAuthToken = val

@@ -17,6 +17,7 @@ package root
 import (
 	"context"
 	"crypto/tls"
+	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -153,15 +154,44 @@ func runRootCommand(ctx context.Context, s *provider.Store, c Opts) error {
 
 			cfg.NumWorkers = c.PodSyncWorkers
 
-			// Enable TLS if configured
+			// Always enable TLS for kube-apiserver <-> kubelet communication.
+			// Prefer explicit keypair from provider config, then APISERVER_* env, else fallback to self-signed.
+			var withTLS nodeutil.NodeOpt
 			if config.TLS.CertPath != "" && config.TLS.KeyPath != "" {
-				return nodeutil.WithTLSConfig(
+				log.G(ctx).Info("Enabling TLS from provider config keypair")
+				withTLS = nodeutil.WithTLSConfig(
 					nodeutil.WithKeyPairFromPath(config.TLS.CertPath, config.TLS.KeyPath),
 					maybeCA(config.TLS.CACertPath),
-				)(cfg)
+				)
+			} else if apiConfig.CertPath != "" && apiConfig.KeyPath != "" {
+				log.G(ctx).Info("Enabling TLS from APISERVER_* environment keypair")
+				withTLS = nodeutil.WithTLSConfig(
+					nodeutil.WithKeyPairFromPath(apiConfig.CertPath, apiConfig.KeyPath),
+					maybeCA(apiConfig.CACertPath),
+				)
+			} else {
+				// Self-signed fallback for managed control planes (e.g., EKS) where no CA is available.
+				log.G(ctx).Warn("No TLS keypair provided; generating self-signed certificate. kubectl logs/exec/attach require --insecure-skip-tls-verify-backend")
+				// Build SANs: localhost, loopbacks, pod IP (if set), and node name as DNS.
+				var ips []net.IP
+				var names []string
+				names = append(names, "localhost", config.VirtualNode.NodeName)
+				ips = append(ips, net.ParseIP("127.0.0.1"), net.ParseIP("::1"))
+				if ip := os.Getenv("VKUBELET_POD_IP"); ip != "" {
+					if parsed := net.ParseIP(ip); parsed != nil {
+						ips = append(ips, parsed)
+					}
+				}
+				cert, genErr := generateSelfSignedCert(names, ips, 24*time.Hour)
+				if genErr != nil {
+					return errors.Wrap(genErr, "generate self-signed cert")
+				}
+				withTLS = nodeutil.WithTLSConfig(func(tc *tls.Config) error {
+					tc.Certificates = []tls.Certificate{cert}
+					return nil
+				})
 			}
-
-			return nil
+			return withTLS(cfg)
 		},
 		nodeutil.AttachProviderRoutes(mux),
 	)

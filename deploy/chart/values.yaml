@@ -22,7 +22,7 @@ deployment:
     virtualKubelet:
       image:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet"
-        tag: "v0.4.1"
+        tag: "v0.4.2"
         pullPolicy: Always
 
       resources: {}
@@ -94,11 +94,7 @@ appConfig:
     enable: false
     clients: []
 
-  # TLS configuration
-  # - cert, key, caCert should be base64-encoded data (no line breaks)
-  # - If all three are provided, a Secret named "<release>-tls" will be created automatically
-  # - The paths below are used by the Virtual Kubelet and should match the mount location
   tls:
-    certPath: "/etc/kubelet-tls/tls.crt"
-    keyPath: "/etc/kubelet-tls/tls.key"
-    caCertPath: "/etc/kubelet-tls/ca.crt"
+    certPath: ""
+    keyPath: ""
+    caCertPath: ""
