@@ -107,6 +107,13 @@ type PromtailConfig struct {
 	Clients []PromtailClientConfig `yaml:"clients,omitempty"`
 }
 
+// TLSConfig holds TLS certificate configuration for Virtual Kubelet
+type TLSConfig struct {
+	CertPath   string `yaml:"certPath,omitempty"`
+	KeyPath    string `yaml:"keyPath,omitempty"`
+	CACertPath string `yaml:"caCertPath,omitempty"`
+}
+
 // ProviderConfig is the complete configuration structure
 type ProviderConfig struct {
 	LogLevel       string              `yaml:"logLevel,omitempty"`
@@ -116,6 +123,7 @@ type ProviderConfig struct {
 	VirtualNode    VirtualNodeConfig   `yaml:"virtualNode"`
 	Gateway        GatewayConfig       `yaml:"gateway"`
 	Promtail       PromtailConfig      `yaml:"promtail"`
+	TLS            TLSConfig           `yaml:"tls,omitempty"`
 	AgentAuthToken string              `yaml:"agentAuthToken,omitempty"`
 }
 

@@ -3,6 +3,8 @@ package glami
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +14,7 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/errdefs"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
+	"github.com/virtual-kubelet/virtual-kubelet/node/api"
 	"github.com/virtual-kubelet/virtual-kubelet/trace"
 	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider"
 	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider/mock"
@@ -658,6 +661,80 @@ func (p *Provider) reconcilePodLifecycle(ctx context.Context, vp *virtualpod.Vir
 			reconcile()
 		}
 	}
+}
+
+// GetContainerLogs retrieves the logs of a container by name from the provider.
+func (p *Provider) GetContainerLogs(ctx context.Context, namespace, podName, containerName string, opts api.ContainerLogOpts) (io.ReadCloser, error) {
+	ctx, span := trace.StartSpan(ctx, "GetContainerLogs")
+	defer span.End()
+
+	// Add pod and container attributes to the current span.
+	ctx = addAttributes(ctx, span, namespaceKey, namespace, nameKey, podName, containerNameKey, containerName)
+
+	logger := log.G(ctx)
+	logger.Infof("GetContainerLogs for pod %s/%s container %s", namespace, podName, containerName)
+
+	key := buildKeyFromNames(namespace, podName)
+
+	p.mutex.RLock()
+	vp, ok := p.virtualPods[key]
+	p.mutex.RUnlock()
+
+	if !ok {
+		return nil, errdefs.NotFoundf("pod %s/%s not found", namespace, podName)
+	}
+
+	// Build the logs URL with query parameters
+	logsURL := vp.GetAgentAddress() + "/logs"
+	
+	// Add query parameters
+	query := make(map[string]string)
+	if opts.Follow {
+		query["follow"] = "true"
+	}
+	if opts.Tail > 0 {
+		query["tail"] = fmt.Sprintf("%d", opts.Tail)
+	}
+
+	// Build URL with query string
+	if len(query) > 0 {
+		logsURL += "?"
+		first := true
+		for k, v := range query {
+			if !first {
+				logsURL += "&"
+			}
+			logsURL += fmt.Sprintf("%s=%s", k, v)
+			first = false
+		}
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, logsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create logs request: %w", err)
+	}
+
+	// Add auth header if configured
+	if p.config.AgentAuthToken != "" {
+		req.Header.Set("Authorization", "Bearer "+p.config.AgentAuthToken)
+	}
+
+	// Make the request
+	httpClient := &http.Client{
+		Timeout: 0, // No timeout for streaming logs
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get logs from agent: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("agent returned status %d for logs request", resp.StatusCode)
+	}
+
+	return resp.Body, nil
 }
 
 // NotifyPods is called to set a pod notifier callback function. This should be called before any operations are done

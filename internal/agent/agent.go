@@ -90,6 +90,9 @@ func NewAgent(port int, command string, wireproxyDir string) *Agent {
 	// Load ConfigMap endpoint
 	agent.mux.HandleFunc("/push_file", agent.handlePushFile)
 
+	// Logs endpoint
+	agent.mux.HandleFunc("/logs", agent.handleLogs)
+
 	// Initialize the server
 	addr := fmt.Sprintf("0.0.0.0:%d", agent.Port)
 	agent.server = &http.Server{

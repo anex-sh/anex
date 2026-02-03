@@ -132,6 +132,22 @@ func runRootCommand(ctx context.Context, s *provider.Store, c Opts) error {
 		return err
 	}
 
+	// Prepare node options
+	nodeOpts := []nodeutil.NodeOpt{
+		nodeutil.WithClient(clientSet),
+		setAuth(config.VirtualNode.NodeName, apiConfig),
+	}
+
+	// Enable TLS if configured
+	if config.TLS.CertPath != "" && config.TLS.KeyPath != "" {
+		nodeOpts = append(nodeOpts, nodeutil.WithTLSConfig(
+			nodeutil.WithKeyPairFromPath(config.TLS.CertPath, config.TLS.KeyPath),
+			maybeCA(config.TLS.CACertPath),
+		))
+	}
+
+	nodeOpts = append(nodeOpts, nodeutil.AttachProviderRoutes(mux))
+
 	cm, err := nodeutil.NewNode(config.VirtualNode.NodeName, newProvider, func(cfg *nodeutil.NodeConfig) error {
 		cfg.KubeconfigPath = c.KubeConfigPath
 		cfg.Handler = mux
@@ -151,19 +167,7 @@ func runRootCommand(ctx context.Context, s *provider.Store, c Opts) error {
 		cfg.NumWorkers = c.PodSyncWorkers
 
 		return nil
-	},
-		nodeutil.WithClient(clientSet),
-		setAuth(config.VirtualNode.NodeName, apiConfig),
-
-		// TODO: Check config.tls or something
-
-		// No access to the root CA on EKS, so we need to disable TLS
-		// nodeutil.WithTLSConfig(
-		//	 nodeutil.WithKeyPairFromPath(apiConfig.CertPath, apiConfig.KeyPath),
-		//	 maybeCA(apiConfig.CACertPath),
-		// ),
-		nodeutil.AttachProviderRoutes(mux),
-	)
+	}, nodeOpts...)
 	if err != nil {
 		return err
 	}

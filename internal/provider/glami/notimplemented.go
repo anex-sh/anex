@@ -3,25 +3,10 @@ package glami
 import (
 	"context"
 	"io"
-	"strings"
 
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"github.com/virtual-kubelet/virtual-kubelet/node/api"
-	"github.com/virtual-kubelet/virtual-kubelet/trace"
 )
-
-// GetContainerLogs retrieves the logs of a container by name from the provider.
-func (p *Provider) GetContainerLogs(ctx context.Context, namespace, podName, containerName string, opts api.ContainerLogOpts) (io.ReadCloser, error) {
-	ctx, span := trace.StartSpan(ctx, "GetContainerLogs")
-	defer span.End()
-
-	// Add pod and container attributes to the current span.
-	ctx = addAttributes(ctx, span, namespaceKey, namespace, nameKey, podName, containerNameKey, containerName)
-
-	log.G(ctx).Infof("receive GetContainerLogs %q", podName)
-
-	return io.NopCloser(strings.NewReader("")), nil
-}
 
 // RunInContainer executes a command in a container in the pod, copying data
 // between in/out/err and the container's stdin/stdout/stderr.

@@ -2,10 +2,13 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -155,4 +158,173 @@ func (a *Agent) handlePushFile(w http.ResponseWriter, r *http.Request) {
 		"bytes":   len(body.Data),
 		"message": "file saved and synced",
 	})
+}
+
+func (a *Agent) handleLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondJSON(w, http.StatusMethodNotAllowed, map[string]any{"message": "Method not allowed. Use GET."})
+		slog.Warn("Method not allowed", "path", r.URL.Path, "method", r.Method)
+		return
+	}
+
+	query := r.URL.Query()
+	follow := query.Get("follow") == "true"
+	tailLines := query.Get("tail")
+
+	logPath := "/var/log/container/main.log"
+	
+	// Check if log file exists
+	if _, err := os.Stat(logPath); os.IsNotExist(err) {
+		http.Error(w, "Log file not found", http.StatusNotFound)
+		return
+	}
+
+	file, err := os.Open(logPath)
+	if err != nil {
+		http.Error(w, "Failed to open log file: "+err.Error(), http.StatusInternalServerError)
+		slog.Error("Failed to open log file", "path", logPath, "error", err)
+		return
+	}
+	defer file.Close()
+
+	// Set headers for streaming
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.WriteHeader(http.StatusOK)
+
+	// If tail is specified, read from the end
+	if tailLines != "" {
+		var lines int
+		if _, err := fmt.Sscanf(tailLines, "%d", &lines); err == nil && lines > 0 {
+			if err := tailFile(file, w, lines); err != nil {
+				slog.Error("Failed to tail log file", "error", err)
+				return
+			}
+		}
+	} else {
+		// Read entire file from beginning
+		if _, err := file.Seek(0, 0); err != nil {
+			slog.Error("Failed to seek log file", "error", err)
+			return
+		}
+		if _, err := file.WriteTo(w); err != nil {
+			slog.Error("Failed to write log file", "error", err)
+			return
+		}
+	}
+
+	// If follow is enabled, keep streaming new logs
+	if follow {
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+
+		// Get current position
+		pos, err := file.Seek(0, os.SEEK_CUR)
+		if err != nil {
+			slog.Error("Failed to get current position", "error", err)
+			return
+		}
+
+		// Poll for new content
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-ticker.C:
+				// Check if file has grown
+				stat, err := file.Stat()
+				if err != nil {
+					slog.Error("Failed to stat log file", "error", err)
+					return
+				}
+
+				if stat.Size() > pos {
+					// Read new content
+					buf := make([]byte, stat.Size()-pos)
+					n, err := file.Read(buf)
+					if err != nil && err != os.ErrClosed {
+						slog.Error("Failed to read new log content", "error", err)
+						return
+					}
+					if n > 0 {
+						if _, err := w.Write(buf[:n]); err != nil {
+							return
+						}
+						if flusher, ok := w.(http.Flusher); ok {
+							flusher.Flush()
+						}
+						pos += int64(n)
+					}
+				}
+			}
+		}
+	}
+}
+
+// tailFile reads the last n lines from a file and writes them to w
+func tailFile(file *os.File, w http.ResponseWriter, n int) error {
+	const bufSize = 4096
+	stat, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	size := stat.Size()
+	if size == 0 {
+		return nil
+	}
+
+	// Read file in chunks from the end to find n lines
+	var lines []string
+	buf := make([]byte, bufSize)
+	offset := size
+
+	for offset > 0 && len(lines) < n {
+		readSize := int64(bufSize)
+		if offset < readSize {
+			readSize = offset
+		}
+		offset -= readSize
+
+		if _, err := file.Seek(offset, 0); err != nil {
+			return err
+		}
+
+		nr, err := file.Read(buf[:readSize])
+		if err != nil {
+			return err
+		}
+
+		// Process buffer in reverse to collect lines
+		chunk := string(buf[:nr])
+		chunkLines := strings.Split(chunk, "\n")
+
+		// Prepend lines (in reverse order)
+		for i := len(chunkLines) - 1; i >= 0; i-- {
+			if len(lines) >= n {
+				break
+			}
+			if chunkLines[i] != "" || i < len(chunkLines)-1 {
+				lines = append([]string{chunkLines[i]}, lines...)
+			}
+		}
+	}
+
+	// Keep only the last n lines
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+
+	// Write the lines
+	for _, line := range lines {
+		if _, err := w.Write([]byte(line + "\n")); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
