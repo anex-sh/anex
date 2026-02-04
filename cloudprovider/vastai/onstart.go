@@ -20,7 +20,7 @@ type OnStartTemplateParams struct {
 
 func GenerateOnStartScript(params OnStartTemplateParams) string {
 	t := template.Must(template.New("onstart").Funcs(template.FuncMap{
-		"add": func(a, b int) int { return a + b },
+		"add": func(a, b, c int) int { return a + b + c },
 	}).Parse(onStartScriptTemplate))
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, params); err != nil {
@@ -84,12 +84,12 @@ PersistentKeepalive = 25
 BindAddress = 127.0.0.1:3128
 
 [TCPServerTunnel]
-ListenPort = 9000
+ListenPort = {{ .ProxyConfig.Client.GatewayPortOffset }}
 Target = 127.0.0.1:8080
 
 {{ range $i, $p := .ContainerPorts }}
 [TCPServerTunnel]
-ListenPort = {{ add $.ProxyConfig.Client.GatewayPortOffset $i }}
+ListenPort = {{ add $.ProxyConfig.Client.GatewayPortOffset $i 1 }}
 Target     = 127.0.0.1:{{ $p }}
 {{ end }}
 

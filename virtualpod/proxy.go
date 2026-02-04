@@ -33,7 +33,7 @@ Target = 127.0.0.1:{{ .AgentLocalPort }}
 {{- if .ContainerPorts }}
 {{ range $i, $p := .ContainerPorts }}
 [TCPServerTunnel]
-ListenPort = {{ add $.ProxyConfig.Client.GatewayPortOffset $i }}
+ListenPort = {{ add $.ProxyConfig.Client.GatewayPortOffset $i 1 }}
 Target     = 127.0.0.1:{{ $p }}
 {{ end }}
 {{- end }}
@@ -91,7 +91,7 @@ func (vp *VirtualPod) generateWireproxyConfig(ctx context.Context, proxyConfig P
 	}
 
 	t := template.Must(template.New("wireproxy").Funcs(template.FuncMap{
-		"add": func(a, b int) int { return a + b },
+		"add": func(a, b, c int) int { return a + b + c },
 	}).Parse(wireproxyConfigTemplate))
 
 	var output bytes.Buffer

@@ -25,6 +25,9 @@ var (
 func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 	var out virtualpod.MachineSpecification
 
+	// Defaults
+	out.VerifiedOnly = true
+
 	const prefix = "gpu-provider.glami.cz/"
 	annotations := pod.GetAnnotations()
 
@@ -267,7 +270,8 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			// TODO: check err
 			proxyConfig, _ := p.getPodProxyConfigById(vp.ProxySlot())
 			machineID, err = p.selectAndProvisionMachine(ctx, vp.Pod(), proxyConfig)
-			vp.SetAgentPort(p.client.GetAgentPort(machineID))
+			port := 10000 + vp.ProxySlot()*100
+			vp.SetAgentPort(port)
 
 			// TODO: This is wrong, pod is not failed if provisioning still in progress
 			if err != nil {

@@ -62,14 +62,6 @@ func (c *Client) GetMachine(ctx context.Context, machineID string) (machine *vir
 	return nil, fmt.Errorf("machine %s not found", machineID)
 }
 
-func (c *Client) GetAgentPort(machineID string) int {
-	if m, exists := c.machines[machineID]; exists {
-		return m.AgentPort
-	}
-
-	return 0
-}
-
 func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.MachineSpecification) ([]virtualpod.Offer, error) {
 	logger := log.G(ctx)
 	logger.Info("Mock: Fetching rental candidates")

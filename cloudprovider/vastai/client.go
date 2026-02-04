@@ -115,10 +115,6 @@ func (c *Client) GetMachine(ctx context.Context, machineID string) (machine *vir
 	return machine, nil
 }
 
-func (c *Client) GetAgentPort(machineID string) int {
-	return 9000
-}
-
 func sortCandidates(candidates []BundleOffer) []BundleOffer {
 	sort.Slice(candidates, func(i, j int) bool {
 		return candidates[i].DphTotal < candidates[j].DphTotal

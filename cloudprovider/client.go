@@ -20,7 +20,6 @@ type Client interface {
 	ListMachines(ctx context.Context) ([]*virtualpod.Machine, error)
 	GetMachine(ctx context.Context, machineID string) (machine *virtualpod.Machine, err error)
 	ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bool) (machineID string, err error)
-	GetAgentPort(machineID string) int
 	DestroyMachine(ctx context.Context, id string) error
 	RenewMachineKeys(ctx context.Context, machineID string, proxy virtualpod.PodProxyConfig) error
 	MapRunningMachines(ctx context.Context, pods *v1.PodList) (map[string]*virtualpod.Machine, error)
