@@ -1,0 +1,58 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ include "chart.fullname" . }}-virtual-pod-restrictions
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "statefulsets"]
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs", "cronjobs"]
+  variables:
+    - name: podSpec
+      expression: |
+        object.kind == 'Pod' ? object.spec :
+        object.kind == 'Deployment' ? object.spec.template.spec :
+        object.kind == 'StatefulSet' ? object.spec.template.spec :
+        object.kind == 'Job' ? object.spec.template.spec :
+        object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec :
+        object.spec
+    - name: podLabels
+      expression: |
+        object.kind == 'Pod' ? object.metadata.labels :
+        object.kind == 'Deployment' ? object.spec.template.metadata.labels :
+        object.kind == 'StatefulSet' ? object.spec.template.metadata.labels :
+        object.kind == 'Job' ? object.spec.template.metadata.labels :
+        object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.metadata.labels :
+        object.metadata.labels
+  matchConditions:
+    # Only apply to resources with the virtual pod label
+    - name: has-virtual-label
+      expression: |
+        has(variables.podLabels) &&
+        'gpu-provider.glami.cz/virtual' in variables.podLabels &&
+        variables.podLabels['gpu-provider.glami.cz/virtual'] == 'true'
+  validations:
+    - expression: |
+        size(variables.podSpec.containers) == 1
+      messageExpression: |
+        'Virtual pods must have exactly 1 container, but found ' + string(size(variables.podSpec.containers)) + ' containers'
+    - expression: |
+        !has(variables.podSpec.initContainers) || size(variables.podSpec.initContainers) == 0
+      message: "Virtual pods must not have init containers"
+    - expression: |
+        !has(variables.podSpec.volumes) || size(variables.podSpec.volumes) == 0
+      message: "Virtual pods must not use volumes"
+    - expression: |
+        !has(variables.podSpec.containers[0].command) || size(variables.podSpec.containers[0].command) == 0
+      message: "Virtual pods must not set command field explicitly"
