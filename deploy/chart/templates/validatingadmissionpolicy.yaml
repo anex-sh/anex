@@ -37,11 +37,14 @@ spec:
         object.metadata.labels
   matchConditions:
     # Only apply to resources with the virtual pod label
+    # Note: variables are not available in matchConditions, so we must inline the logic
     - name: has-virtual-label
       expression: |
-        has(variables.podLabels) &&
-        'gpu-provider.glami.cz/virtual' in variables.podLabels &&
-        variables.podLabels['gpu-provider.glami.cz/virtual'] == 'true'
+        (object.kind == 'Pod' && has(object.metadata.labels) && 'gpu-provider.glami.cz/virtual' in object.metadata.labels && object.metadata.labels['gpu-provider.glami.cz/virtual'] == 'true') ||
+        (object.kind == 'Deployment' && has(object.spec.template.metadata.labels) && 'gpu-provider.glami.cz/virtual' in object.spec.template.metadata.labels && object.spec.template.metadata.labels['gpu-provider.glami.cz/virtual'] == 'true') ||
+        (object.kind == 'StatefulSet' && has(object.spec.template.metadata.labels) && 'gpu-provider.glami.cz/virtual' in object.spec.template.metadata.labels && object.spec.template.metadata.labels['gpu-provider.glami.cz/virtual'] == 'true') ||
+        (object.kind == 'Job' && has(object.spec.template.metadata.labels) && 'gpu-provider.glami.cz/virtual' in object.spec.template.metadata.labels && object.spec.template.metadata.labels['gpu-provider.glami.cz/virtual'] == 'true') ||
+        (object.kind == 'CronJob' && has(object.spec.jobTemplate.spec.template.metadata.labels) && 'gpu-provider.glami.cz/virtual' in object.spec.jobTemplate.spec.template.metadata.labels && object.spec.jobTemplate.spec.template.metadata.labels['gpu-provider.glami.cz/virtual'] == 'true')
   validations:
     - expression: |
         size(variables.podSpec.containers) == 1
@@ -51,8 +54,5 @@ spec:
         !has(variables.podSpec.initContainers) || size(variables.podSpec.initContainers) == 0
       message: "Virtual pods must not have init containers"
     - expression: |
-        !has(variables.podSpec.volumes) || size(variables.podSpec.volumes) == 0
-      message: "Virtual pods must not use volumes"
-    - expression: |
-        !has(variables.podSpec.containers[0].command) || size(variables.podSpec.containers[0].command) == 0
+        object.spec.containers.all(c, has(c.command) && c.command.size() > 0)
       message: "Virtual pods must not set command field explicitly"

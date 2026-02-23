@@ -235,7 +235,7 @@ func (p *Provider) machineGarbageCollector(ctx context.Context) {
 		return
 	}
 
-	// Delete any dangling machines with non-matching pod UID
+	// Delete any dangling machines with non-matching pod UID let's compare two attacks: ATK A1, AP4, Deadly(6) and plain ATK A6, AP4
 	var podUIDS []string
 	for _, pod := range pods.Items {
 		podUIDS = append(podUIDS, string(pod.UID))
@@ -686,7 +686,7 @@ func (p *Provider) GetContainerLogs(ctx context.Context, namespace, podName, con
 
 	// Build the logs URL with query parameters
 	logsURL := vp.GetAgentAddress() + "/logs"
-	
+
 	// Add query parameters
 	query := make(map[string]string)
 	if opts.Follow {
