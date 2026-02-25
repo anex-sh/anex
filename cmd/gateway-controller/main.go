@@ -23,7 +23,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -110,7 +109,8 @@ func main() {
 	}
 
 	// Create informer factory for core resources (Pods, Services)
-	informerFactory := informers.NewSharedInformerFactory(kubeClient, 30*time.Second)
+	// Resync period set to 0 to disable periodic resyncs that cause unnecessary reconciliations
+	informerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
 
 	// Create dynamic informer for VirtualService
 	gvr := schema.GroupVersionResource{
@@ -119,7 +119,8 @@ func main() {
 		Resource: "virtualservices",
 	}
 
-	dynamicInformerFactory := dynamicinformer.NewDynamicSharedInformerFactory(dynamicClient, 30*time.Second)
+	// Resync period set to 0 to disable periodic resyncs that cause unnecessary reconciliations
+	dynamicInformerFactory := dynamicinformer.NewDynamicSharedInformerFactory(dynamicClient, 0)
 	vsInformer := dynamicInformerFactory.ForResource(gvr).Informer()
 	vsLister := dynamicInformerFactory.ForResource(gvr).Lister()
 

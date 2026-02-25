@@ -22,6 +22,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -272,6 +273,23 @@ func (c *Controller) ensureGeneratedService(ctx context.Context, vs *gpuv1alpha1
 		return errors.NewAlreadyExists(corev1.Resource("service"), serviceName)
 	}
 
+	// Check if Service needs updating
+	needsUpdate := false
+	if !equality.Semantic.DeepEqual(existingService.Labels, desiredService.Labels) {
+		needsUpdate = true
+	}
+	if !equality.Semantic.DeepEqual(existingService.Spec.Selector, desiredService.Spec.Selector) {
+		needsUpdate = true
+	}
+	if !equality.Semantic.DeepEqual(existingService.Spec.Ports, desiredService.Spec.Ports) {
+		needsUpdate = true
+	}
+
+	if !needsUpdate {
+		klog.V(5).Infof("Service %s/%s is up-to-date, skipping update", namespace, serviceName)
+		return nil
+	}
+
 	// Update existing Service
 	existingService.Spec.Selector = desiredService.Spec.Selector
 	existingService.Spec.Ports = desiredService.Spec.Ports
@@ -301,7 +319,7 @@ func (c *Controller) configureHAProxy(ctx context.Context, vs *gpuv1alpha1.Virtu
 			// where portID is the index of the target port in the sorted container ports
 			backendPort, err := calculateBackendPort(pod, allocPort.TargetPort)
 			if err != nil {
-				klog.Warningf("Failed to calculate backend port for pod %s/%s, target port %d: %v. Skipping pod.", 
+				klog.Warningf("Failed to calculate backend port for pod %s/%s, target port %d: %v. Skipping pod.",
 					pod.Namespace, pod.Name, allocPort.TargetPort, err)
 				continue
 			}
@@ -395,6 +413,9 @@ func (c *Controller) handleVirtualServiceFinalization(ctx context.Context, vs *g
 }
 
 func (c *Controller) setConditionAndUpdate(ctx context.Context, vs *gpuv1alpha1.VirtualService, condition metav1.Condition) error {
+	// Keep a copy of the original status to check if anything changed
+	originalStatus := vs.Status.DeepCopy()
+
 	// Update or add condition
 	found := false
 	for i, existingCondition := range vs.Status.Conditions {
@@ -413,6 +434,12 @@ func (c *Controller) setConditionAndUpdate(ctx context.Context, vs *gpuv1alpha1.
 	}
 
 	vs.Status.ObservedGeneration = vs.Generation
+
+	// Only update status if it actually changed
+	if equality.Semantic.DeepEqual(originalStatus, &vs.Status) {
+		klog.V(5).Infof("VirtualService %s/%s status unchanged, skipping update", vs.Namespace, vs.Name)
+		return nil
+	}
 
 	// Update status
 	return c.updateVirtualServiceStatus(ctx, vs)
