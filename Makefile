@@ -52,46 +52,26 @@ clean:
 	@echo "Cleaning build artifacts..."
 	@rm -rf $(BIN_DIR)
 
-# Generate CRD manifests
-generate-crds:
-	@echo "Generating CRD manifests..."
-	@~/go/bin/controller-gen crd:crdVersions=v1 paths="./api/..." output:crd:dir=./deploy/chart/crds
-
-# Generate deepcopy code
-generate-deepcopy:
-	@echo "Generating deepcopy code..."
-	@~/go/bin/controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./api/..."
-
-# Generate all code
-generate: generate-deepcopy generate-crds
-
 # Run tests
 test:
 	@echo "Running tests..."
 	go test -v ./...
 
-# Build Docker images
-docker-build: build
+# Build Docker Virtual Kubelet image
+docker-build-kubelet: build-virtual-kubelet
 	@echo "Building Docker images..."
-	docker build -f deploy/Dockerfile -t gpu-provider-virtual-kubelet:$(VERSION) .
-	docker build -f deploy/gateway.Dockerfile -t gpu-provider-gateway:$(VERSION) .
+	docker build -f deploy/Dockerfile -t public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet:$(VERSION) .
+	docker push public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet:$(VERSION)
 
-# Push Docker images (requires registry configuration)
-docker-push:
-	@echo "Pushing Docker images..."
-	docker push gpu-provider-virtual-kubelet:$(VERSION)
-	docker push gpu-provider-gateway:$(VERSION)
-	docker push gpu-provider-container-agent:$(VERSION)
 
-# Install controller-gen if not present
-install-controller-gen:
-	@if ! [ -x "$$(command -v controller-gen)" ]; then \
-		echo "Installing controller-gen..."; \
-		go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.16.5; \
-	fi
+# Build Docker Virtual Kubelet image
+docker-build-gateway: build-gateway-init build-gateway-controller
+	@echo "Building Docker images..."
+	docker build -f deploy/gateway.Dockerfile -t public.ecr.aws/m4v1f8q5/gpu-provider/gateway:$(VERSION) .
+	docker push public.ecr.aws/m4v1f8q5/gpu-provider/gateway:$(VERSION)
 
-# Development: build and generate everything
-dev: generate build
+# Build all Docker images
+docker-build: docker-build-kubelet docker-build-gateway
 
 # Help target
 help:
@@ -103,12 +83,6 @@ help:
 	@echo "  build-gateway-controller - Build gateway-controller binary"
 	@echo "  build-container-agent  - Build container-agent binary"
 	@echo "  clean                  - Remove build artifacts"
-	@echo "  generate               - Generate CRDs and deepcopy code"
-	@echo "  generate-crds          - Generate CRD manifests"
-	@echo "  generate-deepcopy      - Generate deepcopy code"
 	@echo "  test                   - Run tests"
 	@echo "  docker-build           - Build Docker images"
-	@echo "  docker-push            - Push Docker images"
-	@echo "  install-controller-gen - Install controller-gen tool"
-	@echo "  dev                    - Generate and build everything"
 	@echo "  help                   - Show this help message"
