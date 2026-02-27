@@ -86,8 +86,8 @@ type Controller struct {
 	// Port allocator
 	portAllocator *portalloc.Allocator
 
-	// HAProxy manager
-	haproxyManager *haproxy.Manager
+	// HAProxy manager (uses interface for testability)
+	haproxyManager haproxy.Configurer
 
 	// Work queue
 	queue workqueue.RateLimitingInterface
@@ -129,12 +129,67 @@ func NewController(
 	haproxyPassword string,
 ) (*Controller, error) {
 
-	portAllocator := portalloc.NewAllocator(DefaultPortRangeStart, DefaultPortRangeEnd)
-
 	haproxyMgr, err := haproxy.NewManager(haproxySocketPath, haproxyUsername, haproxyPassword)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HAProxy manager: %w", err)
 	}
+
+	return newController(
+		kubeClient,
+		dynamicClient,
+		scheme,
+		informerFactory,
+		vsInformer,
+		vsLister,
+		gatewayPodName,
+		gatewayPodNamespace,
+		gatewayLabels,
+		haproxyMgr,
+	), nil
+}
+
+// NewControllerForTesting creates a new Gateway controller with a custom HAProxy manager.
+// This is intended for use in tests where a mock HAProxy manager is needed.
+func NewControllerForTesting(
+	kubeClient kubernetes.Interface,
+	dynamicClient dynamic.Interface,
+	scheme *runtime.Scheme,
+	informerFactory informers.SharedInformerFactory,
+	vsInformer cache.SharedIndexInformer,
+	vsLister cache.GenericLister,
+	gatewayPodName string,
+	gatewayPodNamespace string,
+	gatewayLabels map[string]string,
+	haproxyManager haproxy.Configurer,
+) *Controller {
+	return newController(
+		kubeClient,
+		dynamicClient,
+		scheme,
+		informerFactory,
+		vsInformer,
+		vsLister,
+		gatewayPodName,
+		gatewayPodNamespace,
+		gatewayLabels,
+		haproxyManager,
+	)
+}
+
+// newController is the internal constructor that creates the controller with all dependencies
+func newController(
+	kubeClient kubernetes.Interface,
+	dynamicClient dynamic.Interface,
+	scheme *runtime.Scheme,
+	informerFactory informers.SharedInformerFactory,
+	vsInformer cache.SharedIndexInformer,
+	vsLister cache.GenericLister,
+	gatewayPodName string,
+	gatewayPodNamespace string,
+	gatewayLabels map[string]string,
+	haproxyManager haproxy.Configurer,
+) *Controller {
+	portAllocator := portalloc.NewAllocator(DefaultPortRangeStart, DefaultPortRangeEnd)
 
 	c := &Controller{
 		kubeClient:          kubeClient,
@@ -150,7 +205,7 @@ func NewController(
 		gatewayPodNamespace: gatewayPodNamespace,
 		gatewayLabels:       gatewayLabels,
 		portAllocator:       portAllocator,
-		haproxyManager:      haproxyMgr,
+		haproxyManager:      haproxyManager,
 		queue:               workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 		virtualServices:     make(map[string]*gpuv1alpha1.VirtualService),
 		virtualPods:         make(map[string]*VirtualPodInfo),
@@ -182,7 +237,7 @@ func NewController(
 		},
 	})
 
-	return c, nil
+	return c
 }
 
 // Run starts the controller

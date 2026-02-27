@@ -1,4 +1,4 @@
-.PHONY: all build build-virtual-kubelet build-gateway-init build-gateway-controller build-container-agent clean docker-build docker-push test
+.PHONY: all build build-virtual-kubelet build-gateway-init build-gateway-controller build-container-agent clean docker-build docker-push test test-gateway test-one setup-envtest install-controller-gen
 
 # Version can be overridden
 VERSION ?= latest
@@ -57,6 +57,75 @@ test:
 	@echo "Running tests..."
 	go test -v ./...
 
+# Run gateway controller integration tests
+test-gateway: setup-envtest
+	@echo "Running gateway controller integration tests..."
+	# KUBEBUILDER_ASSETS=$(ENVTEST_ASSETS_DIR) \
+	export KUBEBUILDER_ASSETS="/home/skarupa/.local/share/kubebuilder-envtest/k8s/1.35.0-linux-amd64"
+	go test -v -timeout 120s ./internal/gateway/... -run "^Test"
+
+# Run a specific test (usage: make test-one TEST=TestVirtualServiceBasicLifecycle)
+test-one: setup-envtest
+	@echo "Running test $(TEST)..."
+	KUBEBUILDER_ASSETS=$(ENVTEST_ASSETS_DIR) \
+		go test -v -timeout 120s ./internal/gateway/... -run "^$(TEST)$$"
+
+# Envtest assets directory
+ENVTEST_ASSETS_DIR ?= $(shell pwd)/.envtest
+
+# Setup envtest binaries
+# If automatic download fails, you can manually install:
+# 1. Install setup-envtest: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.18
+# 2. Run: $(go env GOPATH)/bin/setup-envtest use 1.30.x --bin-dir .envtest
+# Or set KUBEBUILDER_ASSETS environment variable to point to existing binaries
+setup-envtest:
+	@mkdir -p $(ENVTEST_ASSETS_DIR)
+	@if [ ! -f $(ENVTEST_ASSETS_DIR)/kube-apiserver ]; then \
+		echo "Setting up envtest binaries..."; \
+		if command -v setup-envtest >/dev/null 2>&1; then \
+			ENVTEST_PATH=$$(setup-envtest use 1.30.x -p path 2>/dev/null || echo ""); \
+			if [ -n "$$ENVTEST_PATH" ] && [ -f "$$ENVTEST_PATH/kube-apiserver" ]; then \
+				ln -sf "$$ENVTEST_PATH"/* $(ENVTEST_ASSETS_DIR)/; \
+				echo "Envtest binaries linked from $$ENVTEST_PATH"; \
+			else \
+				echo "WARNING: setup-envtest failed. Trying GOPATH version..."; \
+				ENVTEST_PATH=$$($(shell go env GOPATH)/bin/setup-envtest use 1.30.x -p path 2>/dev/null || echo ""); \
+				if [ -n "$$ENVTEST_PATH" ] && [ -f "$$ENVTEST_PATH/kube-apiserver" ]; then \
+					ln -sf "$$ENVTEST_PATH"/* $(ENVTEST_ASSETS_DIR)/; \
+					echo "Envtest binaries linked from $$ENVTEST_PATH"; \
+				else \
+					echo ""; \
+					echo "ERROR: Failed to download envtest binaries automatically."; \
+					echo "Please install manually using one of these methods:"; \
+					echo ""; \
+					echo "  1. Install setup-envtest and run:"; \
+					echo "     go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.18"; \
+					echo "     \$$(go env GOPATH)/bin/setup-envtest use 1.30.x --bin-dir $(ENVTEST_ASSETS_DIR)"; \
+					echo ""; \
+					echo "  2. Set KUBEBUILDER_ASSETS to existing kubebuilder binaries:"; \
+					echo "     export KUBEBUILDER_ASSETS=/path/to/kubebuilder/bin"; \
+					echo ""; \
+					exit 1; \
+				fi; \
+			fi; \
+		else \
+			echo "setup-envtest not found. Installing..."; \
+			go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.18; \
+			ENVTEST_PATH=$$($(shell go env GOPATH)/bin/setup-envtest use 1.30.x -p path 2>/dev/null || echo ""); \
+			if [ -n "$$ENVTEST_PATH" ] && [ -f "$$ENVTEST_PATH/kube-apiserver" ]; then \
+				ln -sf "$$ENVTEST_PATH"/* $(ENVTEST_ASSETS_DIR)/; \
+				echo "Envtest binaries linked from $$ENVTEST_PATH"; \
+			else \
+				echo ""; \
+				echo "ERROR: Failed to download envtest binaries automatically."; \
+				echo "Please install manually. See 'make help' for instructions."; \
+				exit 1; \
+			fi; \
+		fi; \
+	else \
+		echo "Envtest binaries already present in $(ENVTEST_ASSETS_DIR)"; \
+	fi
+
 # Build Docker Virtual Kubelet image
 docker-build-kubelet: build-virtual-kubelet
 	@echo "Building Docker images..."
@@ -73,6 +142,14 @@ docker-build-gateway: build-gateway-init build-gateway-controller
 # Build all Docker images
 docker-build: docker-build-kubelet docker-build-gateway
 
+# Install controller-gen if not present
+install-controller-gen:
+	@if ! [ -x "$$(command -v controller-gen)" ]; then \
+    	echo "Installing controller-gen..."; \
+        go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.16.5; \
+	fi
+
+
 # Help target
 help:
 	@echo "Available targets:"
@@ -83,6 +160,10 @@ help:
 	@echo "  build-gateway-controller - Build gateway-controller binary"
 	@echo "  build-container-agent  - Build container-agent binary"
 	@echo "  clean                  - Remove build artifacts"
-	@echo "  test                   - Run tests"
+	@echo "  test                   - Run all tests"
+	@echo "  test-gateway           - Run gateway controller integration tests"
+	@echo "  test-one TEST=<name>   - Run a specific test (e.g., make test-one TEST=TestVirtualServiceBasicLifecycle)"
+	@echo "  setup-envtest          - Download envtest binaries (kube-apiserver, etcd)"
 	@echo "  docker-build           - Build Docker images"
+	@echo "  install-controller-gen - Install controller-gen tool"
 	@echo "  help                   - Show this help message"
