@@ -365,8 +365,8 @@ func calculateBackendPort(pod *VirtualPodInfo, targetPort int32) (int, error) {
 		return 0, fmt.Errorf("target port %d not found in pod's container ports %v", targetPort, pod.ContainerPorts)
 	}
 
-	// Apply the formula: ListenPort = 10000 + proxySlotID * 100 + portID
-	listenPort := 10000 + pod.ProxySlotID*100 + portID
+	// Apply the formula: ListenPort = 10000 + proxySlotID * 100 + portID + 1
+	listenPort := 10000 + pod.ProxySlotID*100 + portID + 1
 
 	return listenPort, nil
 }

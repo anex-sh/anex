@@ -269,6 +269,15 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			logger.Info("Selecting and provisioning new machine")
 			// TODO: check err
 			proxyConfig, _ := p.getPodProxyConfigById(vp.ProxySlot())
+
+			// TODO: No Gateway for mock
+			//proxyConfig := virtualpod.PodProxyConfig{
+			//	Server: virtualpod.ProxyServerConfig{
+			//		Endpoint: "10.0.0.1",
+			//		Port:     10000 + vp.ProxySlot()*100,
+			//	},
+			//}
+			
 			machineID, err = p.selectAndProvisionMachine(ctx, vp.Pod(), proxyConfig)
 			port := 10000 + vp.ProxySlot()*100
 			vp.SetAgentPort(port)

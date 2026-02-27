@@ -332,6 +332,11 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	var err error
 	var gatewaySlotId int
 	gatewaySlotId, err = p.reserveGatewaySlot()
+
+	// TODO: No Gateway for mock
+	// gatewaySlotId = 0
+	// err = nil
+
 	if err != nil {
 		return err
 	}

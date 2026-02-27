@@ -36,7 +36,7 @@ deployment:
     gateway:
       image:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/gateway"
-        tag: "v0.4.0"
+        tag: "v0.4.2"
         pullPolicy: Always
 
       # TODO: Remove requirements
