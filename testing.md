@@ -56,6 +56,7 @@ func TestMain(m *testing.M) {
 ### Mock HAProxy Manager
 
 Create a mock implementation that:
+
 - Records all `Configure()` and `Remove()` calls
 - Stores the listener configurations passed to it
 - Allows test assertions on what was configured
@@ -83,6 +84,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that creating, updating, and deleting a VirtualService works correctly.
 
 **Steps**:
+
 1. Create a VirtualService with a single port
 2. Assert:
    - Finalizer is added
@@ -105,6 +107,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that VirtualServices with multiple ports allocate unique gateway ports for each.
 
 **Steps**:
+
 1. Create a VirtualService with 3 ports (e.g., 80→8080, 443→8443, 9090→9090)
 2. Assert:
    - `status.allocatedPorts` has 3 entries
@@ -121,6 +124,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that port allocations are stable and reused across reconciliation cycles.
 
 **Steps**:
+
 1. Create a VirtualService with 2 ports
 2. Record the allocated gateway ports from status
 3. Trigger a reconcile (e.g., by adding an annotation to the VirtualService)
@@ -140,6 +144,7 @@ type ConfigureCall struct {
 **Purpose**: Verify the generated Service has correct OwnerReference and labels.
 
 **Steps**:
+
 1. Create a VirtualService
 2. Wait for the generated Service to appear
 3. Assert:
@@ -159,6 +164,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that if a Service with the same name already exists (not owned by VirtualService), the controller sets a conflict condition.
 
 **Steps**:
+
 1. Pre-create a Service with name "my-vsvc" in namespace "default" (without VirtualService ownership)
 2. Create a VirtualService named "my-vsvc" in namespace "default"
 3. Assert:
@@ -180,6 +186,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that non-TCP protocols are rejected.
 
 **Steps**:
+
 1. Create a VirtualService with `protocol: UDP`
 2. Assert:
    - Status shows `Ready=False`
@@ -195,6 +202,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that invalid port numbers are rejected.
 
 **Steps**:
+
 1. Create a VirtualService with `port: 0`
 2. Assert:
    - Status shows `Ready=False`
@@ -205,31 +213,14 @@ type ConfigureCall struct {
 
 ---
 
-### 8. Virtual Pod Matching
-
-**Test: `TestVirtualPodMatching`**
-
-**Purpose**: Verify that only pods with `virtual: "true"` annotation and matching labels are selected as backends.
-
-**Steps**:
-1. Create a VirtualService with selector `app: my-app`
-2. Create Pod A with labels `app: my-app` but NO `virtual: "true"` annotation
-3. Create Pod B with labels `app: my-app` AND annotation `virtual: "true"` + `gpu-provider.glami.cz/proxy-slot-id: "5"`
-4. Create Pod C with labels `app: other-app` AND annotation `virtual: "true"`
-5. Wait for reconcile
-6. Assert:
-   - HAProxy mock config includes only Pod B as a backend
-   - Backend has correct Wireguard IP: `10.254.254.16` (11 + 5 = 16)
-
----
-
-### 9. Backend Port Calculation (Wireproxy Formula)
+### 8. Backend Port Calculation (Wireproxy Formula)
 
 **Test: `TestBackendPortCalculation`**
 
 **Purpose**: Verify the backend port formula: `ListenPort = 10000 + proxySlotID * 100 + portID + 1`
 
 **Steps**:
+
 1. Create a virtual pod with:
    - `gpu-provider.glami.cz/proxy-slot-id: "3"`
    - Container ports: 8080, 9090 (sorted order)
@@ -249,6 +240,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that adding/removing pods dynamically updates HAProxy backends.
 
 **Steps**:
+
 1. Create a VirtualService with selector `app: worker`
 2. Assert HAProxy has 0 backends initially
 3. Create Pod 1 with `app: worker`, `virtual: "true"`, slot 1
@@ -270,6 +262,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that finalization cleans up all resources properly.
 
 **Steps**:
+
 1. Create a VirtualService
 2. Wait for it to be Ready
 3. Record allocated ports and HAProxy configs
@@ -289,6 +282,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that status.observedGeneration is updated correctly.
 
 **Steps**:
+
 1. Create a VirtualService
 2. Wait for Ready
 3. Assert `status.observedGeneration == metadata.generation`
@@ -305,6 +299,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that condition lastTransitionTime only changes when status changes.
 
 **Steps**:
+
 1. Create a VirtualService
 2. Wait for `Ready=True`
 3. Record `lastTransitionTime`
@@ -322,6 +317,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that multiple VirtualServices get unique port allocations.
 
 **Steps**:
+
 1. Create VirtualService A with 2 ports
 2. Create VirtualService B with 2 ports
 3. Create VirtualService C with 1 port
@@ -339,6 +335,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that adding ports to an existing VirtualService works correctly.
 
 **Steps**:
+
 1. Create a VirtualService with 1 port
 2. Wait for Ready
 3. Record allocated port
@@ -358,6 +355,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that removing ports from an existing VirtualService releases allocations.
 
 **Steps**:
+
 1. Create a VirtualService with 3 ports
 2. Wait for Ready
 3. Record allocated ports
@@ -378,6 +376,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that VirtualServices in different namespaces are independent.
 
 **Steps**:
+
 1. Create namespace "ns-a" and "ns-b"
 2. Create VirtualService "my-svc" in "ns-a"
 3. Create VirtualService "my-svc" in "ns-b" (same name, different namespace)
@@ -395,6 +394,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that pod readiness (Running phase) affects backend inclusion.
 
 **Steps**:
+
 1. Create a VirtualService
 2. Create a virtual pod in `Pending` phase
 3. Assert: HAProxy backend list does NOT include the pod (or includes but marked)
@@ -412,6 +412,7 @@ type ConfigureCall struct {
 **Purpose**: Verify behavior with an empty pod selector (matches all virtual pods in namespace).
 
 **Steps**:
+
 1. Create a VirtualService with empty selector `{}`
 2. Create multiple virtual pods with different labels
 3. Assert:
@@ -427,6 +428,7 @@ type ConfigureCall struct {
 **Purpose**: Verify that if a pod doesn't expose the targetPort, it's skipped with a warning.
 
 **Steps**:
+
 1. Create a VirtualService targeting port 9999
 2. Create a virtual pod with container ports [8080, 8081] (no 9999)
 3. Wait for reconcile

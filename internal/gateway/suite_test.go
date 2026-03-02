@@ -18,6 +18,7 @@ package gateway
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -440,4 +441,244 @@ func (te *testEnv) waitForServiceDeleted(t *testing.T, name, namespace string) {
 	}
 
 	t.Fatalf("Timeout waiting for Service %s/%s to be deleted", namespace, name)
+}
+
+// updateVirtualService updates a VirtualService with the given ports
+func (te *testEnv) updateVirtualService(t *testing.T, name, namespace string, ports []gpuv1alpha1.ServicePort, selector map[string]string) *gpuv1alpha1.VirtualService {
+	t.Helper()
+
+	gvr := schema.GroupVersionResource{
+		Group:    "gpu-provider.glami-ml.com",
+		Version:  "v1alpha1",
+		Resource: "virtualservices",
+	}
+
+	// Get current VirtualService
+	obj, err := te.dynamicClient.Resource(gvr).Namespace(namespace).Get(te.ctx, name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Failed to get VirtualService for update: %v", err)
+	}
+
+	vs := &gpuv1alpha1.VirtualService{}
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, vs); err != nil {
+		t.Fatalf("Failed to convert unstructured to VirtualService: %v", err)
+	}
+
+	// Update spec
+	vs.Spec.Service.Ports = ports
+	if selector != nil {
+		vs.Spec.Service.Selector = selector
+	}
+
+	// Convert back to unstructured
+	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(vs)
+	if err != nil {
+		t.Fatalf("Failed to convert VirtualService to unstructured: %v", err)
+	}
+
+	// Update via dynamic client
+	updated, err := te.dynamicClient.Resource(gvr).Namespace(namespace).Update(
+		te.ctx,
+		&unstructured.Unstructured{Object: unstructuredObj},
+		metav1.UpdateOptions{},
+	)
+	if err != nil {
+		t.Fatalf("Failed to update VirtualService: %v", err)
+	}
+
+	result := &gpuv1alpha1.VirtualService{}
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(updated.Object, result); err != nil {
+		t.Fatalf("Failed to convert unstructured to VirtualService: %v", err)
+	}
+
+	return result
+}
+
+// addAnnotationToVirtualService adds an annotation to trigger a reconcile
+func (te *testEnv) addAnnotationToVirtualService(t *testing.T, name, namespace, key, value string) {
+	t.Helper()
+
+	gvr := schema.GroupVersionResource{
+		Group:    "gpu-provider.glami-ml.com",
+		Version:  "v1alpha1",
+		Resource: "virtualservices",
+	}
+
+	// Get current VirtualService
+	obj, err := te.dynamicClient.Resource(gvr).Namespace(namespace).Get(te.ctx, name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Failed to get VirtualService for annotation update: %v", err)
+	}
+
+	// Add annotation
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	annotations[key] = value
+	obj.SetAnnotations(annotations)
+
+	// Update via dynamic client
+	_, err = te.dynamicClient.Resource(gvr).Namespace(namespace).Update(
+		te.ctx,
+		obj,
+		metav1.UpdateOptions{},
+	)
+	if err != nil {
+		t.Fatalf("Failed to add annotation to VirtualService: %v", err)
+	}
+}
+
+// createVirtualPod creates a pod with virtual annotation and proxy slot
+func (te *testEnv) createVirtualPod(t *testing.T, name, namespace string, labels map[string]string, proxySlotID int, containerPorts []int32) *corev1.Pod {
+	t.Helper()
+
+	// Build container ports
+	ports := []corev1.ContainerPort{}
+	for _, p := range containerPorts {
+		ports = append(ports, corev1.ContainerPort{
+			ContainerPort: p,
+			Protocol:      corev1.ProtocolTCP,
+		})
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels:    labels,
+			Annotations: map[string]string{
+				"virtual":                          "true",
+				"gpu-provider.glami.cz/proxy-slot-id": fmt.Sprintf("%d", proxySlotID),
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "main",
+					Image: "fake:latest",
+					Ports: ports,
+				},
+			},
+		},
+	}
+
+	created, err := te.kubeClient.CoreV1().Pods(namespace).Create(te.ctx, pod, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create virtual pod: %v", err)
+	}
+
+	return created
+}
+
+// createRegularPod creates a regular pod without the virtual annotation
+func (te *testEnv) createRegularPod(t *testing.T, name, namespace string, labels map[string]string) *corev1.Pod {
+	t.Helper()
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "main",
+					Image: "fake:latest",
+				},
+			},
+		},
+	}
+
+	created, err := te.kubeClient.CoreV1().Pods(namespace).Create(te.ctx, pod, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create regular pod: %v", err)
+	}
+
+	return created
+}
+
+// createService creates a regular Service (not owned by VirtualService)
+func (te *testEnv) createService(t *testing.T, name, namespace string, ports []corev1.ServicePort) *corev1.Service {
+	t.Helper()
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Type: corev1.ServiceTypeClusterIP,
+			Selector: map[string]string{
+				"app": "some-other-app",
+			},
+			Ports: ports,
+		},
+	}
+
+	created, err := te.kubeClient.CoreV1().Services(namespace).Create(te.ctx, svc, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create Service: %v", err)
+	}
+
+	return created
+}
+
+// deleteService deletes a Service
+func (te *testEnv) deleteService(t *testing.T, name, namespace string) {
+	t.Helper()
+
+	err := te.kubeClient.CoreV1().Services(namespace).Delete(te.ctx, name, metav1.DeleteOptions{})
+	if err != nil {
+		t.Fatalf("Failed to delete Service: %v", err)
+	}
+}
+
+// waitForAllocatedPorts waits for a VirtualService to have a specific number of allocated ports
+func (te *testEnv) waitForAllocatedPorts(t *testing.T, name, namespace string, count int) {
+	t.Helper()
+
+	deadline := time.Now().Add(defaultTimeout)
+	for time.Now().Before(deadline) {
+		vs := te.getVirtualService(t, name, namespace)
+		if len(vs.Status.AllocatedPorts) == count {
+			return
+		}
+		time.Sleep(pollInterval)
+	}
+
+	t.Fatalf("Timeout waiting for VirtualService %s/%s to have %d allocated ports", namespace, name, count)
+}
+
+// waitForHAProxyConfig waits for HAProxy mock to have a specific number of listener configs for a VirtualService
+func (te *testEnv) waitForHAProxyConfig(t *testing.T, ownerKey string, expectedListeners int) {
+	t.Helper()
+
+	deadline := time.Now().Add(defaultTimeout)
+	for time.Now().Before(deadline) {
+		configs := te.mockHAProxy.GetConfigs(ownerKey)
+		if len(configs) == expectedListeners {
+			return
+		}
+		time.Sleep(pollInterval)
+	}
+
+	t.Fatalf("Timeout waiting for HAProxy to have %d listeners for %s", expectedListeners, ownerKey)
+}
+
+// waitForHAProxyBackends waits for HAProxy mock to have expected backends for a specific listener
+func (te *testEnv) waitForHAProxyBackends(t *testing.T, ownerKey string, listenerIndex, expectedBackends int) {
+	t.Helper()
+
+	deadline := time.Now().Add(defaultTimeout)
+	for time.Now().Before(deadline) {
+		configs := te.mockHAProxy.GetConfigs(ownerKey)
+		if len(configs) > listenerIndex && len(configs[listenerIndex].Backends) == expectedBackends {
+			return
+		}
+		time.Sleep(pollInterval)
+	}
+
+	t.Fatalf("Timeout waiting for HAProxy listener %d to have %d backends for %s", listenerIndex, expectedBackends, ownerKey)
 }
