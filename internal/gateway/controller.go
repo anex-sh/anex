@@ -81,7 +81,7 @@ type Controller struct {
 	// Gateway configuration
 	gatewayPodName      string
 	gatewayPodNamespace string
-	gatewayLabels       map[string]string
+	gatewayIP           string
 
 	// Port allocator
 	portAllocator *portalloc.Allocator
@@ -123,7 +123,7 @@ func NewController(
 	vsLister cache.GenericLister,
 	gatewayPodName string,
 	gatewayPodNamespace string,
-	gatewayLabels map[string]string,
+	gatewayIP string,
 	haproxySocketPath string,
 	haproxyUsername string,
 	haproxyPassword string,
@@ -143,7 +143,7 @@ func NewController(
 		vsLister,
 		gatewayPodName,
 		gatewayPodNamespace,
-		gatewayLabels,
+		gatewayIP,
 		haproxyMgr,
 	), nil
 }
@@ -159,7 +159,7 @@ func NewControllerForTesting(
 	vsLister cache.GenericLister,
 	gatewayPodName string,
 	gatewayPodNamespace string,
-	gatewayLabels map[string]string,
+	gatewayIP string,
 	haproxyManager haproxy.Configurer,
 ) *Controller {
 	return newController(
@@ -171,7 +171,7 @@ func NewControllerForTesting(
 		vsLister,
 		gatewayPodName,
 		gatewayPodNamespace,
-		gatewayLabels,
+		gatewayIP,
 		haproxyManager,
 	)
 }
@@ -186,7 +186,7 @@ func newController(
 	vsLister cache.GenericLister,
 	gatewayPodName string,
 	gatewayPodNamespace string,
-	gatewayLabels map[string]string,
+	gatewayIP string,
 	haproxyManager haproxy.Configurer,
 ) *Controller {
 	portAllocator := portalloc.NewAllocator(DefaultPortRangeStart, DefaultPortRangeEnd)
@@ -203,7 +203,7 @@ func newController(
 		vsLister:            vsLister,
 		gatewayPodName:      gatewayPodName,
 		gatewayPodNamespace: gatewayPodNamespace,
-		gatewayLabels:       gatewayLabels,
+		gatewayIP:           gatewayIP,
 		portAllocator:       portAllocator,
 		haproxyManager:      haproxyManager,
 		queue:               workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),

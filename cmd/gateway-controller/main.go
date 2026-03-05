@@ -24,7 +24,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -44,6 +43,7 @@ var (
 	kubeconfig       string
 	gatewayPodName   string
 	gatewayNamespace string
+	gatewayPodIP     string
 	haproxySocket    string
 	haproxyUsername  string
 	haproxyPassword  string
@@ -54,6 +54,7 @@ func init() {
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig file (optional, uses in-cluster config if not provided)")
 	flag.StringVar(&gatewayPodName, "gateway-pod-name", "", "Name of the gateway pod")
 	flag.StringVar(&gatewayNamespace, "gateway-namespace", "", "Namespace of the gateway pod")
+	flag.StringVar(&gatewayPodIP, "gateway-pod-ip", "", "IP of the gateway pod")
 	flag.StringVar(&haproxySocket, "haproxy-socket", "http://127.0.0.1:5555", "HAProxy Data Plane endpoint (http[s]://host:port or unix socket path)")
 	flag.StringVar(&haproxyUsername, "haproxy-username", "admin", "Username for HAProxy Data Plane API basic auth")
 	flag.StringVar(&haproxyPassword, "haproxy-password", "admin", "Password for HAProxy Data Plane API basic auth")
@@ -79,7 +80,14 @@ func main() {
 		}
 	}
 
-	klog.Infof("Starting Gateway Controller for pod %s/%s", gatewayNamespace, gatewayPodName)
+	if gatewayPodIP == "" {
+		gatewayPodIP = os.Getenv("POD_IP")
+		if gatewayPodIP == "" {
+			klog.Fatal("--gateway-pod-ip flag or POD_IP env var is required")
+		}
+	}
+
+	klog.Infof("Starting Gateway Controller for pod %s/%s (IP: %s)", gatewayNamespace, gatewayPodName, gatewayPodIP)
 
 	// Build Kubernetes config
 	config, err := buildConfig()
@@ -124,19 +132,6 @@ func main() {
 	vsInformer := dynamicInformerFactory.ForResource(gvr).Informer()
 	vsLister := dynamicInformerFactory.ForResource(gvr).Lister()
 
-	// Get gateway pod to determine labels
-	gatewayPod, err := kubeClient.CoreV1().Pods(gatewayNamespace).Get(context.Background(), gatewayPodName, v1.GetOptions{})
-	if err != nil {
-		klog.Fatalf("Failed to get gateway pod: %v", err)
-	}
-
-	gatewayLabels := gatewayPod.Labels
-	if gatewayLabels == nil {
-		gatewayLabels = make(map[string]string)
-	}
-
-	klog.Infof("Gateway labels: %v", gatewayLabels)
-
 	// Create controller
 	controller, err := gateway.NewController(
 		kubeClient,
@@ -147,7 +142,7 @@ func main() {
 		vsLister,
 		gatewayPodName,
 		gatewayNamespace,
-		gatewayLabels,
+		gatewayPodIP,
 		haproxySocket,
 		haproxyUsername,
 		haproxyPassword,

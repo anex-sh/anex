@@ -22,6 +22,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -85,7 +86,29 @@ func (c *Controller) reconcileVirtualService(ctx context.Context, vs *gpuv1alpha
 		})
 	}
 
-	// Step 5: Configure HAProxy listeners and backends
+	// Step 5: Ensure EndpointSlice points to gateway IP
+	if err := c.ensureEndpointSlice(ctx, vs); err != nil {
+		if errors.IsAlreadyExists(err) {
+			return c.setConditionAndUpdate(ctx, vs, metav1.Condition{
+				Type:               gpuv1alpha1.ConditionTypeReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             gpuv1alpha1.ReasonServiceConflict,
+				Message:            fmt.Sprintf("EndpointSlice with name %s already exists and is not owned by this VirtualService", vs.Name),
+				ObservedGeneration: vs.Generation,
+				LastTransitionTime: metav1.NewTime(time.Now()),
+			})
+		}
+		return c.setConditionAndUpdate(ctx, vs, metav1.Condition{
+			Type:               gpuv1alpha1.ConditionTypeReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             gpuv1alpha1.ReasonReconcileError,
+			Message:            fmt.Sprintf("Failed to create/update EndpointSlice: %v", err),
+			ObservedGeneration: vs.Generation,
+			LastTransitionTime: metav1.NewTime(time.Now()),
+		})
+	}
+
+	// Step 6: Configure HAProxy listeners and backends
 	if err := c.configureHAProxy(ctx, vs, matchingPods); err != nil {
 		return c.setConditionAndUpdate(ctx, vs, metav1.Condition{
 			Type:               gpuv1alpha1.ConditionTypeReady,
@@ -97,7 +120,7 @@ func (c *Controller) reconcileVirtualService(ctx context.Context, vs *gpuv1alpha
 		})
 	}
 
-	// Step 6: Set Ready condition to True
+	// Step 7: Set Ready condition to True
 	return c.setConditionAndUpdate(ctx, vs, metav1.Condition{
 		Type:               gpuv1alpha1.ConditionTypeReady,
 		Status:             metav1.ConditionTrue,
@@ -223,7 +246,7 @@ func (c *Controller) ensureGeneratedService(ctx context.Context, vs *gpuv1alpha1
 		serviceType = corev1.ServiceTypeNodePort
 	}
 
-	// Build desired Service
+	// Build desired Service (headless/no-selector; EndpointSlice provides the backend)
 	desiredService := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceName,
@@ -237,10 +260,13 @@ func (c *Controller) ensureGeneratedService(ctx context.Context, vs *gpuv1alpha1
 			},
 		},
 		Spec: corev1.ServiceSpec{
-			Type:     serviceType,
-			Selector: c.gatewayLabels, // Selects the gateway pod
-			Ports:    []corev1.ServicePort{},
+			Type:  serviceType,
+			Ports: []corev1.ServicePort{},
 		},
+	}
+	// ClusterIP "None" makes it headless; NodePort doesn't support headless so omit ClusterIP for NodePort.
+	if serviceType == corev1.ServiceTypeClusterIP {
+		desiredService.Spec.ClusterIP = "None"
 	}
 
 	// Build ports - map user-facing port to gateway port
@@ -300,7 +326,7 @@ func (c *Controller) ensureGeneratedService(ctx context.Context, vs *gpuv1alpha1
 	if existingService.Spec.Type != desiredService.Spec.Type {
 		needsUpdate = true
 	}
-	if !equality.Semantic.DeepEqual(existingService.Spec.Selector, desiredService.Spec.Selector) {
+	if serviceType == corev1.ServiceTypeClusterIP && existingService.Spec.ClusterIP != "None" {
 		needsUpdate = true
 	}
 	if !equality.Semantic.DeepEqual(existingService.Spec.Ports, desiredService.Spec.Ports) {
@@ -314,7 +340,7 @@ func (c *Controller) ensureGeneratedService(ctx context.Context, vs *gpuv1alpha1
 
 	// Update existing Service
 	existingService.Spec.Type = desiredService.Spec.Type
-	existingService.Spec.Selector = desiredService.Spec.Selector
+	existingService.Spec.Selector = nil
 	existingService.Spec.Ports = desiredService.Spec.Ports
 	existingService.Labels = desiredService.Labels
 
@@ -325,6 +351,78 @@ func (c *Controller) ensureGeneratedService(ctx context.Context, vs *gpuv1alpha1
 
 	klog.V(4).Infof("Updated Service %s/%s for VirtualService", namespace, serviceName)
 	return nil
+}
+
+func (c *Controller) ensureEndpointSlice(ctx context.Context, vs *gpuv1alpha1.VirtualService) error {
+	name := vs.Name
+	namespace := vs.Namespace
+	isReady := true
+
+	ports := []discoveryv1.EndpointPort{}
+	for _, allocPort := range vs.Status.AllocatedPorts {
+		p := allocPort
+		proto := corev1.ProtocolTCP
+		gatewayPort := p.GatewayPort
+		ports = append(ports, discoveryv1.EndpointPort{
+			Name:     &p.Name,
+			Port:     &gatewayPort,
+			Protocol: &proto,
+		})
+	}
+
+	desired := &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"kubernetes.io/service-name": name,
+				AnnotationManagedBy:          AnnotationManagedByValue,
+				AnnotationOwnerService:       vs.Name,
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(vs, gpuv1alpha1.GroupVersion.WithKind("VirtualService")),
+			},
+		},
+		AddressType: discoveryv1.AddressTypeIPv4,
+		Endpoints: []discoveryv1.Endpoint{
+			{
+				Addresses:  []string{c.gatewayIP},
+				Conditions: discoveryv1.EndpointConditions{Ready: &isReady},
+			},
+		},
+		Ports: ports,
+	}
+
+	existing, err := c.kubeClient.DiscoveryV1().EndpointSlices(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			_, err = c.kubeClient.DiscoveryV1().EndpointSlices(namespace).Create(ctx, desired, metav1.CreateOptions{})
+			return err
+		}
+		return err
+	}
+
+	if !isEndpointSliceOwnedBy(existing, vs) {
+		return errors.NewAlreadyExists(discoveryv1.Resource("endpointslices"), name)
+	}
+
+	if !equality.Semantic.DeepEqual(existing.Endpoints, desired.Endpoints) ||
+		!equality.Semantic.DeepEqual(existing.Ports, desired.Ports) {
+		existing.Endpoints = desired.Endpoints
+		existing.Ports = desired.Ports
+		existing.Labels = desired.Labels
+		_, err = c.kubeClient.DiscoveryV1().EndpointSlices(namespace).Update(ctx, existing, metav1.UpdateOptions{})
+	}
+	return err
+}
+
+func isEndpointSliceOwnedBy(eps *discoveryv1.EndpointSlice, vs *gpuv1alpha1.VirtualService) bool {
+	for _, ownerRef := range eps.OwnerReferences {
+		if ownerRef.UID == vs.UID {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Controller) configureHAProxy(ctx context.Context, vs *gpuv1alpha1.VirtualService, pods []*VirtualPodInfo) error {
@@ -421,6 +519,14 @@ func (c *Controller) handleVirtualServiceFinalization(ctx context.Context, vs *g
 		err := c.kubeClient.CoreV1().Services(vs.Namespace).Delete(ctx, serviceName, metav1.DeleteOptions{})
 		if err != nil && !errors.IsNotFound(err) {
 			klog.Errorf("Failed to delete Service %s/%s: %v", vs.Namespace, serviceName, err)
+		}
+	}
+
+	// Delete generated EndpointSlice (if owned)
+	existingEPS, err := c.kubeClient.DiscoveryV1().EndpointSlices(vs.Namespace).Get(ctx, vs.Name, metav1.GetOptions{})
+	if err == nil && isEndpointSliceOwnedBy(existingEPS, vs) {
+		if delErr := c.kubeClient.DiscoveryV1().EndpointSlices(vs.Namespace).Delete(ctx, vs.Name, metav1.DeleteOptions{}); delErr != nil && !errors.IsNotFound(delErr) {
+			klog.Errorf("Failed to delete EndpointSlice %s/%s: %v", vs.Namespace, vs.Name, delErr)
 		}
 	}
 

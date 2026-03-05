@@ -25,6 +25,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -49,6 +50,8 @@ const (
 	pollInterval         = 100 * time.Millisecond
 )
 
+const gatewayTestIP = "10.100.0.1"
+
 // testEnv holds all test environment resources
 type testEnv struct {
 	env             *envtest.Environment
@@ -62,7 +65,7 @@ type testEnv struct {
 	controller      *Controller
 	ctx             context.Context
 	cancel          context.CancelFunc
-	gatewayLabels   map[string]string
+	gatewayIP       string
 }
 
 // setupTestEnv sets up the test environment with envtest
@@ -136,15 +139,14 @@ func setupTestEnv(t *testing.T) *testEnv {
 		t.Fatalf("Failed to create gateway namespace: %v", err)
 	}
 
-	// Create gateway pod
-	gatewayLabels := map[string]string{
-		"app": "gpu-provider-gateway",
-	}
+	// Create gateway pod (kept for realism; IP is passed directly to controller)
 	gatewayPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      gatewayPodName,
 			Namespace: gatewayPodNamespace,
-			Labels:    gatewayLabels,
+			Labels: map[string]string{
+				"app": "gpu-provider-gateway",
+			},
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{
@@ -185,7 +187,7 @@ func setupTestEnv(t *testing.T) *testEnv {
 		vsLister,
 		gatewayPodName,
 		gatewayPodNamespace,
-		gatewayLabels,
+		gatewayTestIP,
 		mockHAProxy,
 	)
 
@@ -216,7 +218,7 @@ func setupTestEnv(t *testing.T) *testEnv {
 		controller:      controller,
 		ctx:             ctx,
 		cancel:          cancel,
-		gatewayLabels:   gatewayLabels,
+		gatewayIP:       gatewayTestIP,
 	}
 }
 
@@ -259,7 +261,7 @@ func (te *testEnv) createVirtualService(t *testing.T, name, namespace string, po
 		},
 		Spec: gpuv1alpha1.VirtualServiceSpec{
 			Gateway: gpuv1alpha1.GatewaySelector{
-				Selector: te.gatewayLabels,
+				Selector: map[string]string{"app": "gpu-provider-gateway"},
 			},
 			Service: gpuv1alpha1.ServiceSpec{
 				Selector: selector,
@@ -681,4 +683,37 @@ func (te *testEnv) waitForHAProxyBackends(t *testing.T, ownerKey string, listene
 	}
 
 	t.Fatalf("Timeout waiting for HAProxy listener %d to have %d backends for %s", listenerIndex, expectedBackends, ownerKey)
+}
+
+// waitForEndpointSlice waits for an EndpointSlice to exist and returns it
+func (te *testEnv) waitForEndpointSlice(t *testing.T, name, namespace string) *discoveryv1.EndpointSlice {
+	t.Helper()
+
+	deadline := time.Now().Add(defaultTimeout)
+	for time.Now().Before(deadline) {
+		eps, err := te.kubeClient.DiscoveryV1().EndpointSlices(namespace).Get(te.ctx, name, metav1.GetOptions{})
+		if err == nil {
+			return eps
+		}
+		time.Sleep(pollInterval)
+	}
+
+	t.Fatalf("Timeout waiting for EndpointSlice %s/%s to exist", namespace, name)
+	return nil
+}
+
+// waitForEndpointSliceDeleted waits for an EndpointSlice to be deleted
+func (te *testEnv) waitForEndpointSliceDeleted(t *testing.T, name, namespace string) {
+	t.Helper()
+
+	deadline := time.Now().Add(defaultTimeout)
+	for time.Now().Before(deadline) {
+		_, err := te.kubeClient.DiscoveryV1().EndpointSlices(namespace).Get(te.ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return
+		}
+		time.Sleep(pollInterval)
+	}
+
+	t.Fatalf("Timeout waiting for EndpointSlice %s/%s to be deleted", namespace, name)
 }

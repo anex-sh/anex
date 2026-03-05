@@ -120,11 +120,12 @@ func TestVirtualServiceBasicLifecycle(t *testing.T) {
 			AnnotationManagedBy, AnnotationManagedByValue, svc.Labels[AnnotationManagedBy])
 	}
 
-	// Verify Service selector matches gateway labels
-	for k, v := range te.gatewayLabels {
-		if svc.Spec.Selector[k] != v {
-			t.Errorf("Service selector mismatch: expected %s=%s, got %s", k, v, svc.Spec.Selector[k])
-		}
+	// Verify Service is headless (no selector, ClusterIP=None)
+	if len(svc.Spec.Selector) != 0 {
+		t.Errorf("Expected Service to have no selector, got %v", svc.Spec.Selector)
+	}
+	if svc.Spec.ClusterIP != "None" {
+		t.Errorf("Expected Service ClusterIP=None (headless), got %s", svc.Spec.ClusterIP)
 	}
 
 	// Verify Service port mapping
@@ -138,6 +139,16 @@ func TestVirtualServiceBasicLifecycle(t *testing.T) {
 	if svcPort.TargetPort.IntVal != allocatedPort.GatewayPort {
 		t.Errorf("Expected Service targetPort=%d (gatewayPort), got %d",
 			allocatedPort.GatewayPort, svcPort.TargetPort.IntVal)
+	}
+
+	// Step 6b: Verify EndpointSlice is created with gateway IP
+	t.Log("Verifying EndpointSlice...")
+	eps := te.waitForEndpointSlice(t, vsName, vsNamespace)
+	if len(eps.Endpoints) != 1 || len(eps.Endpoints[0].Addresses) != 1 || eps.Endpoints[0].Addresses[0] != te.gatewayIP {
+		t.Errorf("Expected EndpointSlice to have gateway IP %s, got %v", te.gatewayIP, eps.Endpoints)
+	}
+	if len(eps.Ports) != 1 || *eps.Ports[0].Port != allocatedPort.GatewayPort {
+		t.Errorf("Expected EndpointSlice port=%d, got %v", allocatedPort.GatewayPort, eps.Ports)
 	}
 
 	// Step 7: Verify HAProxy mock received Configure() call
@@ -179,9 +190,11 @@ func TestVirtualServiceBasicLifecycle(t *testing.T) {
 		t.Error("HAProxy mock did not receive Remove() call for VirtualService")
 	}
 
-	// Step 11: Verify generated Service is deleted
+	// Step 11: Verify generated Service and EndpointSlice are deleted
 	t.Log("Verifying generated Service is deleted...")
 	te.waitForServiceDeleted(t, vsName, vsNamespace)
+	t.Log("Verifying EndpointSlice is deleted...")
+	te.waitForEndpointSliceDeleted(t, vsName, vsNamespace)
 
 	t.Log("TestVirtualServiceBasicLifecycle completed successfully")
 }
@@ -419,16 +432,22 @@ func TestGeneratedServiceOwnership(t *testing.T) {
 			AnnotationManagedBy, AnnotationManagedByValue, svc.Labels[AnnotationManagedBy])
 	}
 
-	// Step 7: Verify Service type is ClusterIP
+	// Step 7: Verify Service is headless with no selector
 	if svc.Spec.Type != "ClusterIP" {
 		t.Errorf("Expected Service type=ClusterIP, got %s", svc.Spec.Type)
 	}
+	if svc.Spec.ClusterIP != "None" {
+		t.Errorf("Expected Service ClusterIP=None (headless), got %s", svc.Spec.ClusterIP)
+	}
+	if len(svc.Spec.Selector) != 0 {
+		t.Errorf("Expected Service to have no selector, got %v", svc.Spec.Selector)
+	}
 
-	// Step 8: Verify Service selector matches gateway pod labels
-	for k, v := range te.gatewayLabels {
-		if svc.Spec.Selector[k] != v {
-			t.Errorf("Service selector mismatch: expected %s=%s, got %s", k, v, svc.Spec.Selector[k])
-		}
+	// Step 8: Verify EndpointSlice is created with gateway IP
+	t.Log("Verifying EndpointSlice...")
+	eps := te.waitForEndpointSlice(t, vsName, vsNamespace)
+	if len(eps.Endpoints) != 1 || len(eps.Endpoints[0].Addresses) != 1 || eps.Endpoints[0].Addresses[0] != te.gatewayIP {
+		t.Errorf("Expected EndpointSlice to have gateway IP %s, got %v", te.gatewayIP, eps.Endpoints)
 	}
 
 	t.Log("TestGeneratedServiceOwnership completed successfully")

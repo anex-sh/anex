@@ -60,3 +60,8 @@ rules:
   - apiGroups: [""]
     resources: ["services"]
     verbs: ["get","list","watch","create","update","patch","delete"]
+
+  # Gateway Controller: EndpointSlice management
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get","list","watch","create","update","patch","delete"]
