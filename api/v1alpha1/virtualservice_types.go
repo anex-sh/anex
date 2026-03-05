@@ -23,6 +23,13 @@ type GatewaySelector struct {
 
 // ServiceSpec defines a restricted Service-like specification
 type ServiceSpec struct {
+	// Type determines how the Service is exposed. Defaults to ClusterIP.
+	// Valid options are ClusterIP and NodePort.
+	// +optional
+	// +kubebuilder:validation:Enum=ClusterIP;NodePort;""
+	// +kubebuilder:default=ClusterIP
+	Type string `json:"type,omitempty"`
+
 	// Selector is a label selector for virtual pods
 	// +kubebuilder:validation:Required
 	Selector map[string]string `json:"selector"`
@@ -50,6 +57,14 @@ type ServicePort struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	TargetPort int32 `json:"targetPort"`
+
+	// NodePort is the port on each node on which this service is exposed when type is NodePort.
+	// Usually assigned by the system. If specified, it must be in the node port range (typically 30000-32767).
+	// If unspecified, a port will be allocated automatically.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=65535
+	NodePort int32 `json:"nodePort,omitempty"`
 
 	// Protocol is the IP protocol for this port. Must be TCP.
 	// Defaults to TCP.

@@ -217,6 +217,12 @@ func (c *Controller) ensureGeneratedService(ctx context.Context, vs *gpuv1alpha1
 	serviceName := vs.Name
 	namespace := vs.Namespace
 
+	// Determine service type, default to ClusterIP
+	serviceType := corev1.ServiceTypeClusterIP
+	if vs.Spec.Service.Type == "NodePort" {
+		serviceType = corev1.ServiceTypeNodePort
+	}
+
 	// Build desired Service
 	desiredService := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -231,7 +237,7 @@ func (c *Controller) ensureGeneratedService(ctx context.Context, vs *gpuv1alpha1
 			},
 		},
 		Spec: corev1.ServiceSpec{
-			Type:     corev1.ServiceTypeClusterIP,
+			Type:     serviceType,
 			Selector: c.gatewayLabels, // Selects the gateway pod
 			Ports:    []corev1.ServicePort{},
 		},
@@ -250,6 +256,19 @@ func (c *Controller) ensureGeneratedService(ctx context.Context, vs *gpuv1alpha1
 			TargetPort: intstr.FromInt(int(allocPort.GatewayPort)),
 			Protocol:   protocol,
 		}
+
+		// For NodePort services, find the corresponding spec port to get the nodePort value
+		if serviceType == corev1.ServiceTypeNodePort {
+			for _, specPort := range vs.Spec.Service.Ports {
+				if specPort.Port == allocPort.ServicePort {
+					if specPort.NodePort > 0 {
+						servicePort.NodePort = specPort.NodePort
+					}
+					break
+				}
+			}
+		}
+
 		desiredService.Spec.Ports = append(desiredService.Spec.Ports, servicePort)
 	}
 
@@ -278,6 +297,9 @@ func (c *Controller) ensureGeneratedService(ctx context.Context, vs *gpuv1alpha1
 	if !equality.Semantic.DeepEqual(existingService.Labels, desiredService.Labels) {
 		needsUpdate = true
 	}
+	if existingService.Spec.Type != desiredService.Spec.Type {
+		needsUpdate = true
+	}
 	if !equality.Semantic.DeepEqual(existingService.Spec.Selector, desiredService.Spec.Selector) {
 		needsUpdate = true
 	}
@@ -291,6 +313,7 @@ func (c *Controller) ensureGeneratedService(ctx context.Context, vs *gpuv1alpha1
 	}
 
 	// Update existing Service
+	existingService.Spec.Type = desiredService.Spec.Type
 	existingService.Spec.Selector = desiredService.Spec.Selector
 	existingService.Spec.Ports = desiredService.Spec.Ports
 	existingService.Labels = desiredService.Labels

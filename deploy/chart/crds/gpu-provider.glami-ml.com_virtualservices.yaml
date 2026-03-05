@@ -74,6 +74,16 @@ spec:
                 description: Service defines the Service-like specification for virtual
                   pods
                 properties:
+                  type:
+                    default: ClusterIP
+                    description: |-
+                      Type determines how the Service is exposed. Defaults to ClusterIP.
+                      Valid options are ClusterIP and NodePort.
+                    enum:
+                    - ClusterIP
+                    - NodePort
+                    - ""
+                    type: string
                   ports:
                     description: Ports is the list of ports exposed by this service
                     items:
@@ -101,6 +111,14 @@ spec:
                             pod (must be an int)
                           maximum: 65535
                           minimum: 1
+                          type: integer
+                        nodePort:
+                          description: |-
+                            NodePort is the port on each node on which this service is exposed when type is NodePort.
+                            Usually assigned by the system. If specified, it must be in the node port range (typically 30000-32767).
+                            If unspecified, a port will be allocated automatically.
+                          maximum: 65535
+                          minimum: 0
                           type: integer
                       required:
                       - port
