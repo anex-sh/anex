@@ -8,7 +8,7 @@ import (
 )
 
 func TestBuildMachineLabel(t *testing.T) {
-	c := NewClient("http://example", "apikey", "cluster123", "node-a")
+	c := NewClient("http://example", "apikey", "cluster123", "node-a", BansConfig{})
 	label := c.buildMachineLabel("pod-uid-1")
 	if label != "vk:cluster123:node-a:pod-uid-1" {
 		t.Fatalf("unexpected label: %s", label)

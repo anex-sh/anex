@@ -150,6 +150,7 @@ func main() {
 	configPath := mustEnv("GATEWAY_CONFIG_PATH")
 	if _, err := os.Stat(configPath); err == nil {
 		log.Printf("Config file already exists at %s", configPath)
+		// TODO: Check DNS before exiting
 		os.Exit(0)
 	}
 

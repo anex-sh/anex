@@ -92,10 +92,10 @@ func buildInstanceFilters(s virtualpod.MachineSpecification) map[string]interfac
 	}
 
 	// Bool fields
-	if s.VerifiedOnly {
+	if s.VastAI.VerifiedOnly {
 		filters["verified"] = FilterOp{"eq": true}
 	}
-	if s.DatacenterOnly {
+	if s.VastAI.DatacenterOnly {
 		filters["datacenter"] = FilterOp{"eq": true}
 	}
 
@@ -233,15 +233,15 @@ func buildInstanceFilters(s virtualpod.MachineSpecification) map[string]interfac
 	}
 
 	// VastAI DLPerf (dlperf)
-	if s.VastAIDLPerf != nil {
-		filters["dlperf"] = FilterOp{"eq": *s.VastAIDLPerf}
+	if s.VastAI.DLPerf != nil {
+		filters["dlperf"] = FilterOp{"eq": *s.VastAI.DLPerf}
 	} else {
-		if s.VastAIDLPerfMin != nil && s.VastAIDLPerfMax != nil {
-			filters["dlperf"] = FilterOp{"gte": *s.VastAIDLPerfMin, "lte": *s.VastAIDLPerfMax}
-		} else if s.VastAIDLPerfMin != nil {
-			filters["dlperf"] = FilterOp{"gte": *s.VastAIDLPerfMin}
-		} else if s.VastAIDLPerfMax != nil {
-			filters["dlperf"] = FilterOp{"lte": *s.VastAIDLPerfMax}
+		if s.VastAI.DLPerfMin != nil && s.VastAI.DLPerfMax != nil {
+			filters["dlperf"] = FilterOp{"gte": *s.VastAI.DLPerfMin, "lte": *s.VastAI.DLPerfMax}
+		} else if s.VastAI.DLPerfMin != nil {
+			filters["dlperf"] = FilterOp{"gte": *s.VastAI.DLPerfMin}
+		} else if s.VastAI.DLPerfMax != nil {
+			filters["dlperf"] = FilterOp{"lte": *s.VastAI.DLPerfMax}
 		}
 	}
 

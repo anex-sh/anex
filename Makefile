@@ -142,6 +142,12 @@ docker-build-gateway: build-gateway-init build-gateway-controller
 # Build all Docker images
 docker-build: docker-build-kubelet docker-build-gateway
 
+helm-release:
+	@echo "Packaging and pushing Helm chart..."
+	helm package deploy/chart
+	helm push helm-* oci://public.ecr.aws/m4v1f8q5/gpu-provider
+	rm helm-*
+
 # Install controller-gen if not present
 install-controller-gen:
 	@if ! [ -x "$$(command -v controller-gen)" ]; then \
@@ -165,5 +171,6 @@ help:
 	@echo "  test-one TEST=<name>   - Run a specific test (e.g., make test-one TEST=TestVirtualServiceBasicLifecycle)"
 	@echo "  setup-envtest          - Download envtest binaries (kube-apiserver, etcd)"
 	@echo "  docker-build           - Build Docker images"
+	@echo "  helm-release           - Pack Helm and push it to registry"
 	@echo "  install-controller-gen - Install controller-gen tool"
 	@echo "  help                   - Show this help message"

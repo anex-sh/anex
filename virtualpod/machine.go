@@ -21,11 +21,21 @@ const (
 	RegionAny
 )
 
-type MachineSpecification struct {
-	// Bool fields
+type RunPodSpec struct {
+	CloudType           string   // "SECURE" or "COMMUNITY"
+	DataCenterIds       []string // priority-ordered
+	KeepGPUTypePriority bool
+}
+
+type VastAISpec struct {
 	VerifiedOnly   bool
 	DatacenterOnly bool
+	DLPerf         *float64
+	DLPerfMin      *float64
+	DLPerfMax      *float64
+}
 
+type MachineSpecification struct {
 	// List fields
 	GPUNames   []string
 	ComputeCap []string
@@ -35,7 +45,7 @@ type MachineSpecification struct {
 	GPUCount         *int
 	GPUCountMin      *int
 	GPUCountMax      *int
-	VRAM             *int // MB
+	VRAM             *int // per GPU, MB
 	VRAMMin          *int
 	VRAMMax          *int
 	VRAMTotal        *int // MB
@@ -56,18 +66,21 @@ type MachineSpecification struct {
 	RAM              *int // MB
 	RAMMin           *int
 	RAMMax           *int
-	Price            *float64 // per hour
+	Price            *float64 // per hour, whole machine
 	PriceMin         *float64
 	PriceMax         *float64
-	VastAIDLPerf     *float64
-	VastAIDLPerfMin  *float64
-	VastAIDLPerfMax  *float64
 	UploadSpeed      *float64 // Mbps
 	UploadSpeedMin   *float64
 	UploadSpeedMax   *float64
 	DownloadSpeed    *float64 // Mbps
 	DownloadSpeedMin *float64
 	DownloadSpeedMax *float64
+	ContainerDiskInGB *int
+	DiskBW            *float64 // MB/s
+
+	// Provider-specific
+	RunPod RunPodSpec
+	VastAI VastAISpec
 }
 
 type Offer struct {

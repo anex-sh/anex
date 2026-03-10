@@ -59,6 +59,7 @@ spec:
               mountPath: /gateway
 
       containers:
+        {{- if .Values.deployment.containers.virtualKubelet.enabled }}
         # Virtual Kubelet
         - name: virtual-kubelet
           image: {{ .Values.deployment.containers.virtualKubelet.image.repository }}:{{ .Values.deployment.containers.virtualKubelet.image.tag | default .Chart.AppVersion }}
@@ -99,6 +100,7 @@ spec:
             - name: virtual-kubelet-tls
               mountPath: /etc/kubelet-tls
             {{- end }}
+        {{- end }}
 
         # Gateway
         - name: gateway
@@ -181,10 +183,16 @@ spec:
           secret:
             secretName: "{{ include "chart.fullname" . }}-tls"
         {{- end }}
+        {{- if .Values.appConfig.gateway.config }}
+        - name: gateway-config
+          secret:
+            secretName: "{{ include "chart.fullname" . }}-gateway-config"
+        {{- else }}
         - name: gateway-config
           emptyDir:
             sizeLimit: 500Mi
             medium: Memory
+        {{- end }}
         - name: wg-dns-corefile
           configMap:
             name: "{{ include "chart.fullname" . }}-wg-dns-corefile"

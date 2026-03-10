@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/virtual-kubelet/virtual-kubelet/trace"
 	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider"
 	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider/mock"
+	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider/runpod"
 	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider/vastai"
 	"gitlab.devklarka.cz/ai/gpu-provider/internal/utils"
 	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
@@ -53,7 +55,6 @@ type Provider struct {
 	mutex                 sync.RWMutex
 	eventRecorder         record.EventRecorder
 	eventRecorderShutdown func()
-	machineBans           map[string]time.Time
 	k8s                   *kubernetes.Clientset
 	metrics               *Metrics
 }
@@ -102,16 +103,29 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 		rc:                    utils.NewDefaultRetryClient(),
 		eventRecorder:         recorder,
 		eventRecorderShutdown: shutdown,
-		machineBans:           make(map[string]time.Time),
 		k8s:                   clientSet,
 	}
 
-	// Configure cloud provider - currently only VastAI is supported
-	// TODO: Pass hardcoded URL for binary distros
-	if config.CloudProvider.Mock {
+	// Configure cloud provider
+	switch strings.ToLower(config.CloudProvider.Active) {
+	case "mock":
 		provider.client = mock.NewClient(clusterUUID, config.VirtualNode.NodeName)
-	} else {
-		provider.client = vastai.NewClient("https://console.vast.ai/api/v0", config.CloudProvider.VastAI.APIKey, clusterUUID, config.VirtualNode.NodeName)
+	case "runpod":
+		provider.client = runpod.NewClient(
+			config.CloudProvider.RunPod.APIKey,
+			clusterUUID,
+			config.VirtualNode.NodeName,
+		)
+	case "vastai":
+		banDuration := time.Duration(config.GetMachineBanDuration()) * time.Second
+		bansConfig := vastai.BansConfig{
+			Enable:   config.Provisioning.MachineBansStore.LocalFile.Enable,
+			FilePath: config.Provisioning.MachineBansStore.LocalFile.Path,
+			Duration: banDuration,
+		}
+		provider.client = vastai.NewClient("https://console.vast.ai/api/v0", config.CloudProvider.VastAI.APIKey, clusterUUID, config.VirtualNode.NodeName, bansConfig)
+	default:
+		return nil, fmt.Errorf("unknown cloud provider: %s", config.CloudProvider.Active)
 	}
 
 	// Initialize WireGuard keys and assignments if proxy is enabled
@@ -126,21 +140,18 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 		wgKeysDirty = true
 	}
 
-	// Load persisted machine bans if configured
-	if config.Provisioning.MachineBansStore.LocalFile.Enable {
-		// Ensure the bans file exists with empty JSON if it doesn't exist
-		bansPath := provider.getBansFilePath()
+	// TODO: Temporary build hack
+	log.G(ctx).Infof("dirty: %v", wgKeysDirty)
+	
+	// Load persisted machine bans for VastAI provider
+	if vastaiClient, ok := provider.client.(*vastai.Client); ok && config.Provisioning.MachineBansStore.LocalFile.Enable {
+		bansPath := config.Provisioning.MachineBansStore.LocalFile.Path
 		if _, err := os.Stat(bansPath); os.IsNotExist(err) {
-			// Create directory if it doesn't exist
 			if err := os.MkdirAll(filepath.Dir(bansPath), 0o755); err != nil {
 				log.G(ctx).Errorf("failed to create directory for bans file: %v", err)
 			} else {
-				// Create file with empty JSON object
-				emptyJSON := []byte("{}")
-				if err := os.WriteFile(bansPath, emptyJSON, 0o600); err != nil {
-					log.G(ctx).Errorf("failed to create bans file with empty JSON: %v", err)
-				} else {
-					log.G(ctx).Infof("created bans file with empty JSON at %s", bansPath)
+				if err := os.WriteFile(bansPath, []byte("{}"), 0o600); err != nil {
+					log.G(ctx).Errorf("failed to create bans file: %v", err)
 				}
 			}
 		}
@@ -149,78 +160,79 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 		if bansOverwrite := os.Getenv("BANS_OVERWRITE"); bansOverwrite != "" {
 			if err := os.WriteFile(bansPath, []byte(bansOverwrite), 0o600); err != nil {
 				log.G(ctx).Errorf("failed to write bans overwrite to file: %v", err)
-			} else {
-				log.G(ctx).Infof("wrote BANS_OVERWRITE to %s", bansPath)
 			}
 		}
 
-		if err := provider.loadMachineBansFromFile(); err != nil {
+		if err := vastaiClient.LoadMachineBansFromFile(); err != nil {
 			log.G(ctx).Errorf("failed to load machine bans: %v", err)
 		}
 	}
 
 	provider.metrics = NewMetrics()
 
-	// Map existing machines to running pods
-	pods, err := listPodsForNode(ctx, clientSet, provider.nodeName)
-	if err != nil {
-		return nil, fmt.Errorf("error listing pods: %v", err)
-	}
-
-	// TODO: Set Agent port !!!!!!!!!
-	podsMachinesMapping, err := provider.client.MapRunningMachines(ctx, pods)
-
-	//agentCtx, agentStartUpCancel := context.WithTimeout(ctx, provider.config.GetStartupTimeout())
-	//defer agentStartUpCancel()
-	//
-	//client := retryablehttp.NewClient()
-	//client.HTTPClient.Timeout = 0
-	//client.RetryWaitMin = 1 * time.Second
-	//client.RetryWaitMax = 30 * time.Second
-	//client.RetryMax = math.MaxInt32
-	//client.Logger = nil
-
-	for _, pod := range pods.Items {
-		if pod.Status.Phase != v1.PodRunning {
-			continue
+	// TODO: SKIP until RunPod fully implemented
+	/*
+		// Map existing machines to running pods
+		pods, err := listPodsForNode(ctx, clientSet, provider.nodeName)
+		if err != nil {
+			return nil, fmt.Errorf("error listing pods: %v", err)
 		}
 
-		// Restore configs
-		key := buildKey(&pod)
-		proxySlotIndex, _ := strconv.Atoi(pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"])
-		if provider.clientProxySettings[proxySlotIndex].Assigned {
-			// TODO: Handle this
-			log.G(ctx).Errorf("failed to get proxy config for pod %s: %v", key, err)
-		}
-		provider.clientProxySettings[proxySlotIndex].Assigned = true
+		// TODO: Set Agent port !!!!!!!!!
+		podsMachinesMapping, err := provider.client.MapRunningMachines(ctx, pods)
 
-		if machine, ok := podsMachinesMapping[string(pod.UID)]; ok {
-			vp := virtualpod.NewVirtualPod(key, &pod, machine, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
-			if wgKeysDirty {
-				// err = vp.PushWireproxyConfig(agentCtx, client)
-				// TODO: Renew keys; call WP restart
+		//agentCtx, agentStartUpCancel := context.WithTimeout(ctx, provider.config.GetStartupTimeout())
+		//defer agentStartUpCancel()
+		//
+		//client := retryablehttp.NewClient()
+		//client.HTTPClient.Timeout = 0
+		//client.RetryWaitMin = 1 * time.Second
+		//client.RetryWaitMax = 30 * time.Second
+		//client.RetryMax = math.MaxInt32
+		//client.Logger = nil
 
-				log.G(ctx).Info("Renewing machine keys")
+		for _, pod := range pods.Items {
+			if pod.Status.Phase != v1.PodRunning {
+				continue
 			}
-			vp.SetProvisioningCompleted(true)
-			provider.virtualPodsRestored[key] = vp
-		} else {
-			if pod.Spec.RestartPolicy != v1.RestartPolicyNever {
-				vp := virtualpod.NewVirtualPod(key, &pod, &virtualpod.Machine{}, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
-				provider.virtualPodsToRestart[key] = vp
-			} else {
-				pod.Status.Phase = v1.PodFailed
-				pod.Status.ContainerStatuses[0].State = v1.ContainerState{
-					Terminated: &v1.ContainerStateTerminated{
-						ExitCode:   1,
-						Reason:     "Failed",
-						FinishedAt: metav1.Now(),
-					},
+
+			// Restore configs
+			key := buildKey(&pod)
+			proxySlotIndex, _ := strconv.Atoi(pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"])
+			if provider.clientProxySettings[proxySlotIndex].Assigned {
+				// TODO: Handle this
+				log.G(ctx).Errorf("failed to get proxy config for pod %s: %v", key, err)
+			}
+			provider.clientProxySettings[proxySlotIndex].Assigned = true
+
+			if machine, ok := podsMachinesMapping[string(pod.UID)]; ok {
+				vp := virtualpod.NewVirtualPod(key, &pod, machine, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
+				if wgKeysDirty {
+					// err = vp.PushWireproxyConfig(agentCtx, client)
+					// TODO: Renew keys; call WP restart
+
+					log.G(ctx).Info("Renewing machine keys")
 				}
-				provider.notifyPodUpdate(pod.DeepCopy())
+				vp.SetProvisioningCompleted(true)
+				provider.virtualPodsRestored[key] = vp
+			} else {
+				if pod.Spec.RestartPolicy != v1.RestartPolicyNever {
+					vp := virtualpod.NewVirtualPod(key, &pod, &virtualpod.Machine{}, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
+					provider.virtualPodsToRestart[key] = vp
+				} else {
+					pod.Status.Phase = v1.PodFailed
+					pod.Status.ContainerStatuses[0].State = v1.ContainerState{
+						Terminated: &v1.ContainerStateTerminated{
+							ExitCode:   1,
+							Reason:     "Failed",
+							FinishedAt: metav1.Now(),
+						},
+					}
+					provider.notifyPodUpdate(pod.DeepCopy())
+				}
 			}
 		}
-	}
+	*/
 
 	return &provider, nil
 }
@@ -334,8 +346,8 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	gatewaySlotId, err = p.reserveGatewaySlot()
 
 	// TODO: No Gateway for mock
-	// gatewaySlotId = 0
-	// err = nil
+	//gatewaySlotId = 0
+	//err = nil
 
 	if err != nil {
 		return err

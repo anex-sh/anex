@@ -10,3 +10,5 @@ docs/resources/_gen
 
 # Testing yamls
 testing/
+
+deploy/values

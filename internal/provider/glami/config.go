@@ -39,10 +39,20 @@ type VastAIConfig struct {
 	APIKey string `yaml:"apiKey"`
 }
 
+// RunPodConfig holds RunPod-specific configuration
+type RunPodConfig struct {
+	APIKey       string `yaml:"apiKey"`
+	InitURL      string `yaml:"initURL"`
+	AgentURL     string `yaml:"agentURL"`
+	WireproxyURL string `yaml:"wireproxyURL"`
+	PromtailURL  string `yaml:"promtailURL"`
+}
+
 // CloudProviderConfig holds cloud provider configuration
 type CloudProviderConfig struct {
-	Mock   bool         `yaml:"mock"`
+	Active string       `yaml:"active"`
 	VastAI VastAIConfig `yaml:"vastAI"`
+	RunPod RunPodConfig `yaml:"runPod"`
 }
 
 // MachineBansStoreLocalFileConfig holds local file configuration for machine bans
@@ -164,9 +174,31 @@ func (c *ProviderConfig) overrideWithEnv() {
 		c.Cluster.ClusterUUID = val
 	}
 
+	// CloudProvider - Active
+	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "active")); val != "" {
+		c.CloudProvider.Active = val
+	}
+
 	// CloudProvider - VastAI
 	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "vastAI", "apiKey")); val != "" {
 		c.CloudProvider.VastAI.APIKey = val
+	}
+
+	// CloudProvider - RunPod
+	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "apiKey")); val != "" {
+		c.CloudProvider.RunPod.APIKey = val
+	}
+	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "initURL")); val != "" {
+		c.CloudProvider.RunPod.InitURL = val
+	}
+	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "agentURL")); val != "" {
+		c.CloudProvider.RunPod.AgentURL = val
+	}
+	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "wireproxyURL")); val != "" {
+		c.CloudProvider.RunPod.WireproxyURL = val
+	}
+	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "promtailURL")); val != "" {
+		c.CloudProvider.RunPod.PromtailURL = val
 	}
 
 	// Provisioning
@@ -352,9 +384,12 @@ func LoadConfig(providerConfig string) (config ProviderConfig, err error) {
 		config.VirtualNode.PodLimit = defaultPodCapacity
 	}
 
-	// Validate required fields
-	if config.CloudProvider.VastAI.APIKey == "" {
-		return config, fmt.Errorf("cloudProvider.vastAI.apiKey is required and cannot be empty")
+	// Validate cloud provider selection
+	switch strings.ToLower(config.CloudProvider.Active) {
+	case "vastai", "runpod", "mock":
+		// ok
+	default:
+		return config, fmt.Errorf("cloudProvider.active must be one of: vastai, runpod, mock (got %q)", config.CloudProvider.Active)
 	}
 
 	// Validate resource quantities

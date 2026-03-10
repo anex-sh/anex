@@ -20,6 +20,7 @@ deployment:
 
   containers:
     virtualKubelet:
+      enabled: true
       image:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet"
         tag: "v0.4.2"
@@ -89,6 +90,7 @@ appConfig:
 
   gateway:
     configPath: /gateway/config.yaml
+    config: {}  # If set, mounted as secret; init container skipped
 
   promtail:
     enable: false

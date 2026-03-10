@@ -7,13 +7,22 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"gitlab.devklarka.cz/ai/gpu-provider/internal/utils"
 	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 )
+
+type BansConfig struct {
+	Enable   bool
+	FilePath string
+	Duration time.Duration
+}
 
 type Client struct {
 	baseURL     string
@@ -21,9 +30,13 @@ type Client struct {
 	clusterUID  string
 	retryClient *retryablehttp.Client
 	nodeName    string
+
+	machineBans map[string]time.Time
+	bansMu      sync.Mutex
+	bansConfig  BansConfig
 }
 
-func NewClient(baseURL string, apiKey string, clusterUID string, nodeName string) *Client {
+func NewClient(baseURL string, apiKey string, clusterUID string, nodeName string, bansConfig BansConfig) *Client {
 	return &Client{
 		baseURL: baseURL,
 		authHeader: http.Header{
@@ -32,6 +45,8 @@ func NewClient(baseURL string, apiKey string, clusterUID string, nodeName string
 		clusterUID:  clusterUID,
 		retryClient: utils.NewDefaultRetryClient(),
 		nodeName:    nodeName,
+		machineBans: make(map[string]time.Time),
+		bansConfig:  bansConfig,
 	}
 }
 
@@ -159,6 +174,56 @@ func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.Machin
 
 	logger.Infof("Returning %d offers after filtering", len(offers))
 	return offers, nil
+}
+
+func (c *Client) SupportsMachineBans() bool { return true }
+
+func (c *Client) BanMachine(stableID string) {
+	c.bansMu.Lock()
+	defer c.bansMu.Unlock()
+	c.machineBans[stableID] = time.Now()
+	_ = c.persistMachineBansToFile()
+}
+
+func (c *Client) SelectAndProvisionMachine(ctx context.Context, spec virtualpod.MachineSpecification, pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bool, recorder record.EventRecorder) (string, error) {
+	logger := log.G(ctx)
+
+	logger.Info("Searching for available machines matching requirements")
+	recorder.Eventf(pod, v1.EventTypeNormal, "SearchingMachines", "Searching for available machines matching requirements")
+
+	offers, err := c.GetRentalCandidates(ctx, spec)
+	if err != nil {
+		logger.Errorf("Failed to search for available machines: %v", err)
+		recorder.Eventf(pod, v1.EventTypeWarning, "MachineSearchFailed", "Failed to search for available machines")
+		return "", err
+	}
+
+	if len(offers) == 0 {
+		logger.Warn("No machines matching requirements found, will retry")
+		recorder.Eventf(pod, v1.EventTypeWarning, "NoMachinesAvailable", "No machines matching requirements found, will retry")
+	} else {
+		logger.Infof("Found %d machine(s) matching requirements", len(offers))
+		recorder.Eventf(pod, v1.EventTypeNormal, "MachinesFound", "Found %d machine(s) matching requirements", len(offers))
+	}
+
+	// Filter out banned machines
+	c.bansMu.Lock()
+	var candidatesFiltered []string
+	bannedCount := 0
+	for _, offer := range offers {
+		if banTime, banned := c.machineBans[offer.MachineID]; !banned || (c.bansConfig.Duration > 0 && time.Since(banTime) > c.bansConfig.Duration) {
+			candidatesFiltered = append(candidatesFiltered, offer.OfferID)
+		} else {
+			bannedCount++
+		}
+	}
+	c.bansMu.Unlock()
+
+	if bannedCount > 0 {
+		logger.Infof("Filtered out %d banned machine(s), %d candidates remaining", bannedCount, len(candidatesFiltered))
+	}
+
+	return c.ProvisionMachine(ctx, candidatesFiltered, pod, proxy, promtail)
 }
 
 type ProxyTunnel struct {

@@ -14,6 +14,7 @@ import (
 	"gitlab.devklarka.cz/ai/gpu-provider/internal/agent"
 	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 )
 
 type Client struct {
@@ -37,6 +38,21 @@ func NewClient(clusterUID string, nodeName string) *Client {
 		machineCounter:    0,
 		machines:          make(map[string]*virtualpod.Machine),
 	}
+}
+
+func (c *Client) SupportsMachineBans() bool { return false }
+func (c *Client) BanMachine(_ string)       {}
+
+func (c *Client) SelectAndProvisionMachine(ctx context.Context, spec virtualpod.MachineSpecification, pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bool, recorder record.EventRecorder) (string, error) {
+	offers, err := c.GetRentalCandidates(ctx, spec)
+	if err != nil {
+		return "", err
+	}
+	var candidateIDs []string
+	for _, o := range offers {
+		candidateIDs = append(candidateIDs, o.OfferID)
+	}
+	return c.ProvisionMachine(ctx, candidateIDs, pod, proxy, promtail)
 }
 
 func (c *Client) ListMachines(ctx context.Context) ([]*virtualpod.Machine, error) {

@@ -26,9 +26,13 @@ func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 	var out virtualpod.MachineSpecification
 
 	// Defaults
-	out.VerifiedOnly = true
+	out.VastAI.VerifiedOnly = true
 
-	const prefix = "gpu-provider.glami.cz/"
+	const (
+		sharedPrefix = "gpu-provider.glami.cz/"
+		vastaiPrefix = "vastai.gpu-provider.glami.cz/"
+		runpodPrefix = "runpod.gpu-provider.glami.cz/"
+	)
 	annotations := pod.GetAnnotations()
 
 	// Helper functions for parsing
@@ -66,33 +70,25 @@ func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 	// Track exact values to handle conflicts with min/max
 	exactFields := make(map[string]bool)
 
-	// First pass: collect exact values
+	// First pass: collect exact values (shared prefix only)
 	for key := range annotations {
-		if !strings.HasPrefix(key, prefix) {
+		if !strings.HasPrefix(key, sharedPrefix) {
 			continue
 		}
-		setting := strings.TrimPrefix(key, prefix)
-
-		// Check if this is an exact value (no -min or -max suffix)
+		setting := strings.TrimPrefix(key, sharedPrefix)
 		if !strings.HasSuffix(setting, "-min") && !strings.HasSuffix(setting, "-max") {
 			exactFields[setting] = true
 		}
 	}
 
-	// Second pass: parse all annotations
+	// Shared annotations
 	for key, value := range annotations {
-		if !strings.HasPrefix(key, prefix) {
+		if !strings.HasPrefix(key, sharedPrefix) {
 			continue
 		}
-		setting := strings.TrimPrefix(key, prefix)
+		setting := strings.TrimPrefix(key, sharedPrefix)
 
 		switch {
-		// Bool fields
-		case setting == "verified-only":
-			out.VerifiedOnly = parseBool(value)
-		case setting == "datacenter-only":
-			out.DatacenterOnly = parseBool(value)
-
 		// List fields
 		case setting == "region":
 			regions := parseList(value)
@@ -189,14 +185,6 @@ func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 		case setting == "price-max" && !exactFields["price"]:
 			out.PriceMax = parseFloat(value)
 
-		// VastAI DLPerf
-		case setting == "vastai-dlperf":
-			out.VastAIDLPerf = parseFloat(value)
-		case setting == "vastai-dlperf-min" && !exactFields["vastai-dlperf"]:
-			out.VastAIDLPerfMin = parseFloat(value)
-		case setting == "vastai-dlperf-max" && !exactFields["vastai-dlperf"]:
-			out.VastAIDLPerfMax = parseFloat(value)
-
 		// Upload Speed
 		case setting == "upload-speed":
 			out.UploadSpeed = parseFloat(value)
@@ -212,6 +200,52 @@ func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 			out.DownloadSpeedMin = parseFloat(value)
 		case setting == "download-speed-max" && !exactFields["download-speed"]:
 			out.DownloadSpeedMax = parseFloat(value)
+
+		// Container Disk
+		case setting == "container-disk-gb":
+			out.ContainerDiskInGB = parseInt(value)
+
+		// Disk Bandwidth
+		case setting == "disk-bw":
+			out.DiskBW = parseFloat(value)
+		}
+	}
+
+	// VastAI-specific annotations
+	for key, value := range annotations {
+		if !strings.HasPrefix(key, vastaiPrefix) {
+			continue
+		}
+		setting := strings.TrimPrefix(key, vastaiPrefix)
+
+		switch setting {
+		case "verified-only":
+			out.VastAI.VerifiedOnly = parseBool(value)
+		case "datacenter-only":
+			out.VastAI.DatacenterOnly = parseBool(value)
+		case "dlperf":
+			out.VastAI.DLPerf = parseFloat(value)
+		case "dlperf-min":
+			out.VastAI.DLPerfMin = parseFloat(value)
+		case "dlperf-max":
+			out.VastAI.DLPerfMax = parseFloat(value)
+		}
+	}
+
+	// RunPod-specific annotations
+	for key, value := range annotations {
+		if !strings.HasPrefix(key, runpodPrefix) {
+			continue
+		}
+		setting := strings.TrimPrefix(key, runpodPrefix)
+
+		switch setting {
+		case "cloud-type":
+			out.RunPod.CloudType = strings.ToUpper(strings.TrimSpace(value))
+		case "datacenter-ids":
+			out.RunPod.DataCenterIds = parseList(value)
+		case "keep-gpu-type-priority":
+			out.RunPod.KeepGPUTypePriority = parseBool(value)
 		}
 	}
 
@@ -277,7 +311,7 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			//		Port:     10000 + vp.ProxySlot()*100,
 			//	},
 			//}
-			
+
 			machineID, err = p.selectAndProvisionMachine(ctx, vp.Pod(), proxyConfig)
 			port := 10000 + vp.ProxySlot()*100
 			vp.SetAgentPort(port)
@@ -302,10 +336,9 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			if errors.Is(err, ErrMachineFailed) || errors.Is(err, context.DeadlineExceeded) {
 				logger.Warnf("Machine startup failed, banning machine: %s", vp.MachineStableID())
 				p.eventRecorder.Eventf(vp.Pod(), v1.EventTypeWarning, "MachineStartupFailed", "Machine failed to start, will retry with different machine")
-				p.mutex.Lock()
-				p.machineBans[vp.MachineStableID()] = time.Now()
-				_ = p.persistMachineBansToFile()
-				p.mutex.Unlock()
+				if p.client.SupportsMachineBans() {
+					p.client.BanMachine(vp.MachineStableID())
+				}
 				restartOnly = false
 			}
 			p.machineCleanup(ctx, vp)
@@ -360,13 +393,18 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 		proxyConfig, _ := p.getPodProxyConfigById(vp.ProxySlot())
 
 		var wireproxyPort, agentPublicPort, agentLocalPort string
-		if p.config.CloudProvider.Mock {
+		switch strings.ToLower(p.config.CloudProvider.Active) {
+		case "mock":
 			// TODO: Refactor to get rid of hardcoded part
 			effectiveID, _ := strconv.Atoi(vp.ID())
 			wireproxyPort = strconv.Itoa(51900 + effectiveID)
 			agentPublicPort = strconv.Itoa(31000 + effectiveID)
 			agentLocalPort = strconv.Itoa(32000 + effectiveID)
-		} else {
+		case "runpod":
+			wireproxyPort = "51820"
+			agentPublicPort = strconv.Itoa(proxyConfig.Client.GatewayPortOffset)
+			agentLocalPort = "8080"
+		default:
 			wireproxyPort = "${VAST_UDP_PORT_72000}"
 			agentPublicPort = "9000"
 			agentLocalPort = "8080"
@@ -435,57 +473,13 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, p
 	logger := log.G(ctx)
 	logger.Info("Selecting and provisioning machine")
 
+	machineSpec := newMachineSpecification(pod)
 	bo := backoff.NewConstantBackOff(60 * time.Second)
 
 	op := func() error {
-		p.mutex.Lock()
-		defer p.mutex.Unlock()
-		time.Sleep(1 * time.Second)
-
-		logger.Info("Searching for available machines matching requirements")
-		p.eventRecorder.Eventf(pod, v1.EventTypeNormal, "SearchingMachines", "Searching for available machines matching requirements")
-
-		machineSpec := newMachineSpecification(pod)
-		var offers []virtualpod.Offer
-		offers, err = p.client.GetRentalCandidates(ctx, machineSpec)
-		if err != nil {
-			logger.Errorf("Failed to search for available machines: %v", err)
-			p.eventRecorder.Eventf(pod, v1.EventTypeWarning, "MachineSearchFailed", "Failed to search for available machines")
-			p.metrics.podsProvisioningTotal.WithLabelValues("false", "rental_candidates_search_failed").Inc()
-			return err
-		}
-
-		if len(offers) == 0 {
-			logger.Warn("No machines matching requirements found, will retry")
-			p.eventRecorder.Eventf(pod, v1.EventTypeWarning, "NoMachinesAvailable", "No machines matching requirements found, will retry")
-		} else {
-			logger.Infof("Found %d machine(s) matching requirements", len(offers))
-			p.eventRecorder.Eventf(pod, v1.EventTypeNormal, "MachinesFound", "Found %d machine(s) matching requirements", len(offers))
-		}
-
-		// Filter out banned machines
-		var candidatesFiltered []string
-		banDuration := time.Duration(p.config.GetMachineBanDuration()) * time.Second
-		bannedCount := 0
-		for _, offer := range offers {
-			if banTime, banned := p.machineBans[offer.MachineID]; !banned || (banDuration > 0 && time.Since(banTime) > banDuration) {
-				candidatesFiltered = append(candidatesFiltered, offer.OfferID)
-			} else {
-				bannedCount++
-			}
-		}
-		if bannedCount > 0 {
-			logger.Infof("Filtered out %d banned machine(s), %d candidates remaining", bannedCount, len(candidatesFiltered))
-		}
-
-		machineID, err = p.client.ProvisionMachine(ctx, candidatesFiltered, pod, proxyConfig, p.config.Promtail.Enable)
-		// TODO: Make some smoke tests on init; retry Unauthorized during runtime
-		//if errors.Is(err, utils.ErrBadPayload) || errors.Is(err, utils.ErrUnauthorized) {
-		//	p.metrics.podsProvisioningTotal.WithLabelValues("false", "provisioning_call_failed").Inc()
-		//	return backoff.Permanent(err)
-		//}
-
-		return err
+		var opErr error
+		machineID, opErr = p.client.SelectAndProvisionMachine(ctx, machineSpec, pod, proxyConfig, p.config.Promtail.Enable, p.eventRecorder)
+		return opErr
 	}
 
 	err = backoff.Retry(op, bo)

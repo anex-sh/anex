@@ -5,6 +5,7 @@ import (
 
 	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 )
 
 type ProxyConfig struct {
@@ -16,10 +17,11 @@ type ProxyConfig struct {
 }
 
 type Client interface {
-	GetRentalCandidates(ctx context.Context, specs virtualpod.MachineSpecification) ([]virtualpod.Offer, error)
+	SelectAndProvisionMachine(ctx context.Context, spec virtualpod.MachineSpecification, pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bool, recorder record.EventRecorder) (machineID string, err error)
+	SupportsMachineBans() bool
+	BanMachine(stableID string)
 	ListMachines(ctx context.Context) ([]*virtualpod.Machine, error)
 	GetMachine(ctx context.Context, machineID string) (machine *virtualpod.Machine, err error)
-	ProvisionMachine(ctx context.Context, candidatesID []string, pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bool) (machineID string, err error)
 	DestroyMachine(ctx context.Context, id string) error
 	RenewMachineKeys(ctx context.Context, machineID string, proxy virtualpod.PodProxyConfig) error
 	MapRunningMachines(ctx context.Context, pods *v1.PodList) (map[string]*virtualpod.Machine, error)
