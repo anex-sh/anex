@@ -149,7 +149,7 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 
 	// TODO: Temporary build hack
 	log.G(ctx).Infof("dirty: %v", wgKeysDirty)
-	
+
 	// Load persisted machine bans for VastAI provider
 	if vastaiClient, ok := provider.client.(*vastai.Client); ok && config.Provisioning.MachineBansStore.LocalFile.Enable {
 		bansPath := config.Provisioning.MachineBansStore.LocalFile.Path
@@ -177,69 +177,63 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 
 	provider.metrics = NewMetrics()
 
-	// TODO: SKIP until RunPod fully implemented
-	/*
-		// Map existing machines to running pods
-		pods, err := listPodsForNode(ctx, clientSet, provider.nodeName)
-		if err != nil {
-			return nil, fmt.Errorf("error listing pods: %v", err)
+	// Map existing machines to running pods on startup (recovery after restart)
+	pods, err := listPodsForNode(ctx, clientSet, provider.nodeName)
+	if err != nil {
+		return nil, fmt.Errorf("error listing pods: %v", err)
+	}
+
+	podsMachinesMapping, err := provider.client.MapRunningMachines(ctx, pods)
+	if err != nil {
+		log.G(ctx).Errorf("failed to map running machines: %v", err)
+		podsMachinesMapping = make(map[string]*virtualpod.Machine)
+	}
+
+	for _, pod := range pods.Items {
+		if pod.Status.Phase != v1.PodRunning {
+			continue
 		}
 
-		// TODO: Set Agent port !!!!!!!!!
-		podsMachinesMapping, err := provider.client.MapRunningMachines(ctx, pods)
+		key := buildKey(&pod)
+		proxySlotIndex, _ := strconv.Atoi(pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"])
+		if provider.clientProxySettings[proxySlotIndex].Assigned {
+			log.G(ctx).Errorf("proxy slot %d already assigned, skipping pod %s", proxySlotIndex, key)
+			continue
+		}
+		provider.clientProxySettings[proxySlotIndex].Assigned = true
 
-		//agentCtx, agentStartUpCancel := context.WithTimeout(ctx, provider.config.GetStartupTimeout())
-		//defer agentStartUpCancel()
-		//
-		//client := retryablehttp.NewClient()
-		//client.HTTPClient.Timeout = 0
-		//client.RetryWaitMin = 1 * time.Second
-		//client.RetryWaitMax = 30 * time.Second
-		//client.RetryMax = math.MaxInt32
-		//client.Logger = nil
+		if machine, ok := podsMachinesMapping[string(pod.UID)]; ok {
+			port := 10000 + proxySlotIndex*100
+			vp := virtualpod.NewVirtualPod(key, &pod, machine, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
+			vp.SetAgentPort(port)
 
-		for _, pod := range pods.Items {
-			if pod.Status.Phase != v1.PodRunning {
-				continue
+			if rc, ok := provider.client.(*runpod.Client); ok {
+				ep := fmt.Sprintf("http://10.254.254.%d:%d", 11+proxySlotIndex, port)
+				rc.RegisterAgentEndpoint(machine.ID, ep)
 			}
 
-			// Restore configs
-			key := buildKey(&pod)
-			proxySlotIndex, _ := strconv.Atoi(pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"])
-			if provider.clientProxySettings[proxySlotIndex].Assigned {
-				// TODO: Handle this
-				log.G(ctx).Errorf("failed to get proxy config for pod %s: %v", key, err)
+			if wgKeysDirty {
+				log.G(ctx).Info("Renewing machine keys")
 			}
-			provider.clientProxySettings[proxySlotIndex].Assigned = true
-
-			if machine, ok := podsMachinesMapping[string(pod.UID)]; ok {
-				vp := virtualpod.NewVirtualPod(key, &pod, machine, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
-				if wgKeysDirty {
-					// err = vp.PushWireproxyConfig(agentCtx, client)
-					// TODO: Renew keys; call WP restart
-
-					log.G(ctx).Info("Renewing machine keys")
-				}
-				vp.SetProvisioningCompleted(true)
-				provider.virtualPodsRestored[key] = vp
+			vp.SetProvisioningCompleted(true)
+			provider.virtualPodsRestored[key] = vp
+		} else {
+			if pod.Spec.RestartPolicy != v1.RestartPolicyNever {
+				vp := virtualpod.NewVirtualPod(key, &pod, &virtualpod.Machine{}, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
+				provider.virtualPodsToRestart[key] = vp
 			} else {
-				if pod.Spec.RestartPolicy != v1.RestartPolicyNever {
-					vp := virtualpod.NewVirtualPod(key, &pod, &virtualpod.Machine{}, proxySlotIndex, nil, nil, provider.config.AgentAuthToken)
-					provider.virtualPodsToRestart[key] = vp
-				} else {
-					pod.Status.Phase = v1.PodFailed
-					pod.Status.ContainerStatuses[0].State = v1.ContainerState{
-						Terminated: &v1.ContainerStateTerminated{
-							ExitCode:   1,
-							Reason:     "Failed",
-							FinishedAt: metav1.Now(),
-						},
-					}
-					provider.notifyPodUpdate(pod.DeepCopy())
+				pod.Status.Phase = v1.PodFailed
+				pod.Status.ContainerStatuses[0].State = v1.ContainerState{
+					Terminated: &v1.ContainerStateTerminated{
+						ExitCode:   1,
+						Reason:     "Failed",
+						FinishedAt: metav1.Now(),
+					},
 				}
+				provider.notifyPodUpdate(pod.DeepCopy())
 			}
 		}
-	*/
+	}
 
 	return &provider, nil
 }

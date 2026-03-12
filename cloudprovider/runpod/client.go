@@ -73,6 +73,26 @@ func (c *Client) buildPodName(podUID interface{}) string {
 	return fmt.Sprintf("vk:%s:%s:%s", c.clusterUID, c.nodeName, podUID)
 }
 
+type podNameInfo struct {
+	Prefix     string
+	ClusterUID string
+	NodeName   string
+	PodUID     string
+}
+
+func parsePodName(name string) *podNameInfo {
+	parts := strings.Split(name, ":")
+	if len(parts) != 4 || parts[0] != "vk" {
+		return nil
+	}
+	return &podNameInfo{
+		Prefix:     parts[0],
+		ClusterUID: parts[1],
+		NodeName:   parts[2],
+		PodUID:     parts[3],
+	}
+}
+
 func (c *Client) SupportsMachineBans() bool { return false }
 func (c *Client) BanMachine(_ string)       {}
 
@@ -156,7 +176,7 @@ func (c *Client) checkAgentHealth(endpoint string) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-func (c *Client) podToMachine(pod *podResponse) *virtualpod.Machine {
+func (c *Client) podToMachine(pod *podResponse, skipHealthCheck bool) *virtualpod.Machine {
 	machine := &virtualpod.Machine{
 		ID:       pod.ID,
 		PublicIP: pod.PublicIP,
@@ -175,10 +195,14 @@ func (c *Client) podToMachine(pod *podResponse) *virtualpod.Machine {
 	case "EXITED":
 		machine.State = virtualpod.MachineStateFailed
 	case "RUNNING":
-		machine.State = virtualpod.MachineStatePending
-		if ep, ok := c.agentEndpoints.Load(pod.ID); ok {
-			if c.checkAgentHealth(ep.(string)) {
-				machine.State = virtualpod.MachineStateRunning
+		if skipHealthCheck {
+			machine.State = virtualpod.MachineStateRunning
+		} else {
+			machine.State = virtualpod.MachineStatePending
+			if ep, ok := c.agentEndpoints.Load(pod.ID); ok {
+				if c.checkAgentHealth(ep.(string)) {
+					machine.State = virtualpod.MachineStateRunning
+				}
 			}
 		}
 	default:
@@ -197,10 +221,10 @@ func (c *Client) GetMachine(ctx context.Context, machineID string) (*virtualpod.
 	if pod.ID == "" {
 		return nil, fmt.Errorf("machine ID=%s not found", machineID)
 	}
-	return c.podToMachine(&pod), nil
+	return c.podToMachine(&pod, false), nil
 }
 
-func (c *Client) ListMachines(ctx context.Context) ([]*virtualpod.Machine, error) {
+func (c *Client) listPodsInternal(ctx context.Context) ([]podResponse, error) {
 	url := baseURL + "/pods"
 	_, pods, err := utils.MakeRequest[[]podResponse](ctx, c.retryClient, http.MethodGet, url, nil, c.authHeader)
 	if err != nil {
@@ -208,22 +232,79 @@ func (c *Client) ListMachines(ctx context.Context) ([]*virtualpod.Machine, error
 	}
 
 	namePrefix := c.buildPodName("")
+	var filtered []podResponse
+	for _, p := range pods {
+		if strings.HasPrefix(p.Name, namePrefix) {
+			filtered = append(filtered, p)
+		}
+	}
+	return filtered, nil
+}
+
+func (c *Client) ListMachines(ctx context.Context) ([]*virtualpod.Machine, error) {
+	pods, err := c.listPodsInternal(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	var machines []*virtualpod.Machine
 	for i := range pods {
-		if !strings.HasPrefix(pods[i].Name, namePrefix) {
-			continue
-		}
-		machines = append(machines, c.podToMachine(&pods[i]))
+		machines = append(machines, c.podToMachine(&pods[i], false))
 	}
 	return machines, nil
 }
 
-func (c *Client) MapRunningMachines(_ context.Context, _ *v1.PodList) (map[string]*virtualpod.Machine, error) {
-	return nil, errNotImplemented
+func (c *Client) MapRunningMachines(ctx context.Context, pods *v1.PodList) (map[string]*virtualpod.Machine, error) {
+	rpPods, err := c.listPodsInternal(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]*virtualpod.Machine)
+	for i := range rpPods {
+		info := parsePodName(rpPods[i].Name)
+		if info == nil {
+			continue
+		}
+		for _, pod := range pods.Items {
+			if string(pod.UID) == info.PodUID {
+				result[info.PodUID] = c.podToMachine(&rpPods[i], true)
+				break
+			}
+		}
+	}
+	return result, nil
 }
 
-func (c *Client) PruneDanglingMachines(_ context.Context, _ []string) error {
-	return errNotImplemented
+func (c *Client) PruneDanglingMachines(ctx context.Context, podUIDs []string) error {
+	logger := log.G(ctx)
+	logger.Info("Starting dangling RunPod pods pruning")
+
+	rpPods, err := c.listPodsInternal(ctx)
+	if err != nil {
+		return err
+	}
+
+	uidSet := make(map[string]bool, len(podUIDs))
+	for _, uid := range podUIDs {
+		uidSet[uid] = true
+	}
+
+	for _, rp := range rpPods {
+		info := parsePodName(rp.Name)
+		if info == nil {
+			continue
+		}
+		if !uidSet[info.PodUID] {
+			logger.Infof("Deleting dangling RunPod pod %s (name: %s)", rp.ID, rp.Name)
+			if err := c.DestroyMachine(ctx, rp.ID); err != nil {
+				logger.Errorf("Failed to delete dangling RunPod pod %s: %v", rp.ID, err)
+			}
+		}
+	}
+
+	logger.Info("Dangling RunPod pods pruning completed")
+	return nil
 }
 
 func (c *Client) DestroyMachine(ctx context.Context, id string) error {

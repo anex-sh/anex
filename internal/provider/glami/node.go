@@ -179,7 +179,7 @@ func (p *Provider) ConfigureNode(ctx context.Context, n *v1.Node) {
 
 	// Start the garbage collection
 	go func(ctx context.Context) {
-		ticker := time.NewTicker(15 * time.Minute)
+		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
 
 		for {
