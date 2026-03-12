@@ -33,7 +33,8 @@ type ServerConfig struct {
 	PrivateKey string `yaml:"private_key"`
 	PublicKey  string `yaml:"public_key"`
 	Endpoint   string `yaml:"endpoint"`
-	Port       int    `yaml:"port"`
+	PortUDP    int    `yaml:"port_udp"`
+	PortTCP    int    `yaml:"port_tcp"`
 }
 
 type FullConfig struct {
@@ -41,7 +42,7 @@ type FullConfig struct {
 	Peers  []PeerConfig `yaml:"peers"`
 }
 
-func generateWireguardConfig(endpoint string, port int, peerCount int) (string, error) {
+func generateWireguardConfig(endpoint string, portUDP, portTCP int, peerCount int) (string, error) {
 	// --- Generate server keypair ---
 	serverPriv, err := wgtypes.GeneratePrivateKey()
 	if err != nil {
@@ -54,7 +55,8 @@ func generateWireguardConfig(endpoint string, port int, peerCount int) (string, 
 			PrivateKey: serverPriv.String(),
 			PublicKey:  serverPub.String(),
 			Endpoint:   endpoint,
-			Port:       port,
+			PortUDP:    portUDP,
+			PortTCP:    portTCP,
 		},
 		Peers: make([]PeerConfig, 0, peerCount),
 	}
@@ -158,8 +160,10 @@ func main() {
 	gatewayEndpoint := os.Getenv("GATEWAY_ENDPOINT")
 	gatewaySvcName := os.Getenv("GATEWAY_SERVICE_NAME")
 
-	portStr := mustEnv("GATEWAY_PORT")
-	gatewayPort, _ := strconv.Atoi(portStr)
+	portUDPStr := mustEnv("GATEWAY_PORT_UDP")
+	gatewayPortUDP, _ := strconv.Atoi(portUDPStr)
+	portTCPStr := mustEnv("GATEWAY_PORT_TCP")
+	gatewayPortTCP, _ := strconv.Atoi(portTCPStr)
 
 	// If gatewayEndpoint is not provided, try to get it from the LoadBalancer service
 	if gatewayEndpoint == "" && gatewaySvcName != "" {
@@ -192,7 +196,8 @@ func main() {
 
 	configContent, err := generateWireguardConfig(
 		gatewayEndpoint,
-		gatewayPort,
+		gatewayPortUDP,
+		gatewayPortTCP,
 		peerCount,
 	)
 	if err != nil {

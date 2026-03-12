@@ -128,6 +128,8 @@ fi
 # Start HAProxy Data Plane API
 /usr/local/bin/dataplaneapi -f /etc/haproxy/dataplaneapi.yaml --log-level debug &
 
+# wstunnel: tunnel WSS→UDP for RunPod (which can't use plain UDP)
+/usr/local/bin/wstunnel server --restrict-to localhost:51820 ws://0.0.0.0:51821 &
 
 # Keep the script running
 wait

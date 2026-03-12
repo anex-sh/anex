@@ -63,7 +63,7 @@ ensure_curl || {
 export GPU_PROVIDER_GATEWAY_CLIENT_ADDRESS={{ .ProxyConfig.Client.Address }}
 export GPU_PROVIDER_GATEWAY_CLIENT_PK={{ .ProxyConfig.Client.PrivateKey }}
 export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_ENDPOINT={{ .ProxyConfig.Server.Endpoint }}
-export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PORT={{ .ProxyConfig.Server.Port }}
+export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PORT={{ .ProxyConfig.Server.PortUDP }}
 export GPU_PROVIDER_GATEWAY_CLIENT_SERVER_PK={{ .ProxyConfig.Server.PublicKey }}
 
 mkdir -p /etc/virtualpod

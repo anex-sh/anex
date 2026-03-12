@@ -80,7 +80,7 @@ func (c *Client) SelectAndProvisionMachine(ctx context.Context, spec virtualpod.
 
 	// Override entrypoint to download and run init script
 	query["dockerEntrypoint"] = []string{"/bin/bash", "-c"}
-	query["dockerStartCmd"] = []string{`curl -fsSL "$GPU_PROVIDER_INIT_URL" -o /tmp/init.sh && bash /tmp/init.sh`}
+	query["dockerStartCmd"] = []string{`apt-get update && apt-get install -y curl && curl -fsSL "$GPU_PROVIDER_INIT_URL" -o /tmp/init.sh && bash /tmp/init.sh`}
 
 	// Build environment variables
 	provisionEnv := BuildProvisionEnv(pod, proxy, promtail, c.urls)

@@ -26,6 +26,10 @@ spec:
       port: 51820
       targetPort: 51820
       protocol: UDP
+    - name: wstunnel
+      port: 51821
+      targetPort: 51821
+      protocol: TCP
     - name: hc
       port: 9000
       targetPort: 9000
@@ -47,8 +51,14 @@ spec:
   selector:
     app: "{{ include "chart.fullname" . }}"
   ports:
-    - port: 51820
+    - name: wg
+      port: 51820
       targetPort: 51820
-      nodePort: {{ .Values.deployment.gateway.nodePort }}
+      nodePort: {{ .Values.deployment.gateway.nodePortUDP }}
       protocol: UDP
+    - name: wstunnel
+      port: 51821
+      targetPort: 51821
+      nodePort: {{ .Values.deployment.gateway.nodePortTCP }}
+      protocol: TCP
 {{- end }}

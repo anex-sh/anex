@@ -16,7 +16,8 @@ deployment:
   gateway:
     class: "" # enum: [node-port | aws-eks]
     domain: ""
-    nodePort: 31000
+    nodePortUDP: 31000
+    nodePortTCP: 31001
 
   containers:
     virtualKubelet:

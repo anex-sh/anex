@@ -18,7 +18,8 @@ import (
 type ProxyServerConfig struct {
 	Endpoint  string `yaml:"endpoint"`
 	PublicKey string `yaml:"public_key"`
-	Port      int    `yaml:"port"`
+	PortUDP   int    `yaml:"port_udp"`
+	PortTCP   int    `yaml:"port_tcp"`
 	DNS       string `yaml:"dns,omitempty"`
 }
 

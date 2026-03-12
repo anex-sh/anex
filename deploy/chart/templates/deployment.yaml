@@ -46,11 +46,17 @@ spec:
             {{- end }}
             - name: GATEWAY_SERVICE_NAME
               value: "{{ include "chart.fullname" . }}-gateway"
-            - name: GATEWAY_PORT
+            - name: GATEWAY_PORT_UDP
               {{- if eq .Values.deployment.gateway.class "aws-eks" }}
               value: "51820"
               {{- else }}
-              value: "{{ .Values.deployment.gateway.nodePort }}"
+              value: "{{ .Values.deployment.gateway.nodePortUDP }}"
+              {{- end }}
+            - name: GATEWAY_PORT_TCP
+              {{- if eq .Values.deployment.gateway.class "aws-eks" }}
+              value: "51821"
+              {{- else }}
+              value: "{{ .Values.deployment.gateway.nodePortTCP }}"
               {{- end }}
             - name: PEER_COUNT
               value: "32"
@@ -113,6 +119,9 @@ spec:
             - name: wg
               containerPort: 51820
               protocol: UDP
+            - name: wstunnel
+              containerPort: 51821
+              protocol: TCP
             - name: hc
               containerPort: 9000
               protocol: TCP
