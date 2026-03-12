@@ -115,6 +115,13 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 			config.CloudProvider.RunPod.APIKey,
 			clusterUUID,
 			config.VirtualNode.NodeName,
+			runpod.URLConfig{
+				InitURL:      config.CloudProvider.RunPod.InitURL,
+				AgentURL:     config.CloudProvider.RunPod.AgentURL,
+				WireproxyURL: config.CloudProvider.RunPod.WireproxyURL,
+				WstunnelURL:  config.CloudProvider.RunPod.WstunnelURL,
+				PromtailURL:  config.CloudProvider.RunPod.PromtailURL,
+			},
 		)
 	case "vastai":
 		banDuration := time.Duration(config.GetMachineBanDuration()) * time.Second

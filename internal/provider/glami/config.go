@@ -45,6 +45,7 @@ type RunPodConfig struct {
 	InitURL      string `yaml:"initURL"`
 	AgentURL     string `yaml:"agentURL"`
 	WireproxyURL string `yaml:"wireproxyURL"`
+	WstunnelURL  string `yaml:"wstunnelURL"`
 	PromtailURL  string `yaml:"promtailURL"`
 }
 
@@ -196,6 +197,9 @@ func (c *ProviderConfig) overrideWithEnv() {
 	}
 	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "wireproxyURL")); val != "" {
 		c.CloudProvider.RunPod.WireproxyURL = val
+	}
+	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "wstunnelURL")); val != "" {
+		c.CloudProvider.RunPod.WstunnelURL = val
 	}
 	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "promtailURL")); val != "" {
 		c.CloudProvider.RunPod.PromtailURL = val
