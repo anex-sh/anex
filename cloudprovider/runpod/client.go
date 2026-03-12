@@ -226,12 +226,34 @@ func (c *Client) PruneDanglingMachines(_ context.Context, _ []string) error {
 	return errNotImplemented
 }
 
-func (c *Client) DestroyMachine(_ context.Context, _ string) error {
-	return errNotImplemented
+func (c *Client) DestroyMachine(ctx context.Context, id string) error {
+	logger := log.G(ctx)
+	logger.Infof("Destroying RunPod pod: %s", id)
+
+	url := fmt.Sprintf("%s/pods/%s", baseURL, id)
+	_, _, err := utils.MakeRequest[struct{}](ctx, c.retryClient, http.MethodDelete, url, nil, c.authHeader)
+	if err != nil {
+		logger.Errorf("Failed to destroy RunPod pod %s: %v", id, err)
+		return err
+	}
+
+	logger.Infof("Successfully destroyed RunPod pod: %s", id)
+	return nil
 }
 
-func (c *Client) RestartMachine(_ context.Context, _ string, _ bool) error {
-	return errNotImplemented
+func (c *Client) RestartMachine(ctx context.Context, id string, _ bool) error {
+	logger := log.G(ctx)
+	logger.Infof("Resetting RunPod pod: %s", id)
+
+	url := fmt.Sprintf("%s/pods/%s/reset", baseURL, id)
+	_, _, err := utils.MakeRequest[struct{}](ctx, c.retryClient, http.MethodPost, url, nil, c.authHeader)
+	if err != nil {
+		logger.Errorf("Failed to reset RunPod pod %s: %v", id, err)
+		return err
+	}
+
+	logger.Infof("Successfully reset RunPod pod: %s", id)
+	return nil
 }
 
 func (c *Client) RenewMachineKeys(_ context.Context, _ string, _ virtualpod.PodProxyConfig) error {
