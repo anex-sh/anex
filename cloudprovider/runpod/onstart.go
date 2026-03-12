@@ -27,8 +27,8 @@ type wireproxyTemplateParams struct {
 const wireproxyConfigTemplate = `[Interface]
 Address     = {{ .Proxy.Client.Address }}
 PrivateKey  = {{ .Proxy.Client.PrivateKey }}
-ListenPort  = 51820
 DNS         = 10.254.254.1
+MTU         = 1400
 
 [Peer]
 PublicKey           = {{ .Proxy.Server.PublicKey }}
@@ -82,16 +82,16 @@ func joinShellArgs(args []string) string {
 
 // ProvisionEnv holds all environment variables needed by init.sh.
 type ProvisionEnv struct {
-	WireproxyConfig  string // base64-encoded wireproxy config
-	AgentCmd         string // /container_agent run ...
-	Workdir          string
-	AgentURL         string
-	WireproxyURL     string
-	WstunnelURL      string
-	PromtailURL      string
-	InitURL          string
-	GatewayEndpoint  string // WG server IP/DNS (for wstunnel)
-	GatewayWSPort    string // WG server port (for wstunnel)
+	WireproxyConfig string // base64-encoded wireproxy config
+	AgentCmd        string // /container_agent run ...
+	Workdir         string
+	AgentURL        string
+	WireproxyURL    string
+	WstunnelURL     string
+	PromtailURL     string
+	InitURL         string
+	GatewayEndpoint string // WG server IP/DNS (for wstunnel)
+	GatewayWSPort   string // WG server port (for wstunnel)
 }
 
 // BuildProvisionEnv builds the environment variables for the RunPod init script.
@@ -177,14 +177,14 @@ func BuildProvisionEnv(pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bo
 // ToEnvMap returns the environment variables as a map for the RunPod API.
 func (e ProvisionEnv) ToEnvMap() map[string]string {
 	env := map[string]string{
-		"GPU_PROVIDER_WIREPROXY_CONFIG":   e.WireproxyConfig,
-		"GPU_PROVIDER_AGENT_CMD":          e.AgentCmd,
-		"GPU_PROVIDER_AGENT_URL":          e.AgentURL,
-		"GPU_PROVIDER_WIREPROXY_URL":      e.WireproxyURL,
-		"GPU_PROVIDER_WSTUNNEL_URL":       e.WstunnelURL,
-		"GPU_PROVIDER_INIT_URL":           e.InitURL,
-		"GPU_PROVIDER_GATEWAY_ENDPOINT":   e.GatewayEndpoint,
-		"GPU_PROVIDER_GATEWAY_WS_PORT":    e.GatewayWSPort,
+		"GPU_PROVIDER_WIREPROXY_CONFIG": e.WireproxyConfig,
+		"GPU_PROVIDER_AGENT_CMD":        e.AgentCmd,
+		"GPU_PROVIDER_AGENT_URL":        e.AgentURL,
+		"GPU_PROVIDER_WIREPROXY_URL":    e.WireproxyURL,
+		"GPU_PROVIDER_WSTUNNEL_URL":     e.WstunnelURL,
+		"GPU_PROVIDER_INIT_URL":         e.InitURL,
+		"GPU_PROVIDER_GATEWAY_ENDPOINT": e.GatewayEndpoint,
+		"GPU_PROVIDER_GATEWAY_WS_PORT":  e.GatewayWSPort,
 	}
 	if e.PromtailURL != "" {
 		env["GPU_PROVIDER_PROMTAIL_URL"] = e.PromtailURL

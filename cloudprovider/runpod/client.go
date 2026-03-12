@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
@@ -27,13 +29,30 @@ type URLConfig struct {
 	PromtailURL  string
 }
 
+type podResponse struct {
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	DesiredStatus string  `json:"desiredStatus"`
+	PublicIP      string  `json:"publicIp"`
+	MachineID     string  `json:"machineId"`
+	CostPerHr     float64 `json:"costPerHr"`
+	GPU           struct {
+		ID          string `json:"id"`
+		DisplayName string `json:"displayName"`
+		Count       int    `json:"count"`
+	} `json:"gpu"`
+	VcpuCount  float64 `json:"vcpuCount"`
+	MemoryInGb float64 `json:"memoryInGb"`
+}
+
 // Client implements cloudprovider.Client for RunPod.
 type Client struct {
-	clusterUID  string
-	nodeName    string
-	retryClient *retryablehttp.Client
-	authHeader  http.Header
-	urls        URLConfig
+	clusterUID     string
+	nodeName       string
+	retryClient    *retryablehttp.Client
+	authHeader     http.Header
+	urls           URLConfig
+	agentEndpoints sync.Map // machineID → agent endpoint URL
 }
 
 func NewClient(apiKey, clusterUID, nodeName string, urls URLConfig) *Client {
@@ -122,12 +141,81 @@ func (c *Client) SelectAndProvisionMachine(ctx context.Context, spec virtualpod.
 	return response.ID, nil
 }
 
-func (c *Client) GetMachine(_ context.Context, _ string) (*virtualpod.Machine, error) {
-	return nil, errNotImplemented
+// RegisterAgentEndpoint stores the wireguard tunnel agent endpoint for a machine.
+func (c *Client) RegisterAgentEndpoint(machineID, endpoint string) {
+	c.agentEndpoints.Store(machineID, endpoint)
 }
 
-func (c *Client) ListMachines(_ context.Context) ([]*virtualpod.Machine, error) {
-	return nil, errNotImplemented
+func (c *Client) checkAgentHealth(endpoint string) bool {
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(endpoint + "/healthz")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+func (c *Client) podToMachine(pod *podResponse) *virtualpod.Machine {
+	machine := &virtualpod.Machine{
+		ID:       pod.ID,
+		PublicIP: pod.PublicIP,
+		States: virtualpod.States{
+			GpuName:    pod.GPU.DisplayName,
+			CpuCores:   pod.VcpuCount,
+			CpuRam:     pod.MemoryInGb * 1024,
+			PricePerHr: pod.CostPerHr,
+		},
+	}
+	if pod.MachineID != "" {
+		machine.MachineID = pod.MachineID
+	}
+
+	switch pod.DesiredStatus {
+	case "EXITED":
+		machine.State = virtualpod.MachineStateFailed
+	case "RUNNING":
+		machine.State = virtualpod.MachineStatePending
+		if ep, ok := c.agentEndpoints.Load(pod.ID); ok {
+			if c.checkAgentHealth(ep.(string)) {
+				machine.State = virtualpod.MachineStateRunning
+			}
+		}
+	default:
+		machine.State = virtualpod.MachineStatePending
+	}
+
+	return machine
+}
+
+func (c *Client) GetMachine(ctx context.Context, machineID string) (*virtualpod.Machine, error) {
+	url := fmt.Sprintf("%s/pods/%s", baseURL, machineID)
+	_, pod, err := utils.MakeRequest[podResponse](ctx, c.retryClient, http.MethodGet, url, nil, c.authHeader)
+	if err != nil {
+		return nil, err
+	}
+	if pod.ID == "" {
+		return nil, fmt.Errorf("machine ID=%s not found", machineID)
+	}
+	return c.podToMachine(&pod), nil
+}
+
+func (c *Client) ListMachines(ctx context.Context) ([]*virtualpod.Machine, error) {
+	url := baseURL + "/pods"
+	_, pods, err := utils.MakeRequest[[]podResponse](ctx, c.retryClient, http.MethodGet, url, nil, c.authHeader)
+	if err != nil {
+		return nil, err
+	}
+
+	namePrefix := c.buildPodName("")
+	var machines []*virtualpod.Machine
+	for i := range pods {
+		if !strings.HasPrefix(pods[i].Name, namePrefix) {
+			continue
+		}
+		machines = append(machines, c.podToMachine(&pods[i]))
+	}
+	return machines, nil
 }
 
 func (c *Client) MapRunningMachines(_ context.Context, _ *v1.PodList) (map[string]*virtualpod.Machine, error) {

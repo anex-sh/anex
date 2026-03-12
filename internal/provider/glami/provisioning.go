@@ -3,6 +3,7 @@ package glami
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
+	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider/runpod"
 	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	"k8s.io/api/core/v1"
 )
@@ -325,6 +327,13 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 			vp.SetMachine(&virtualpod.Machine{
 				ID: machineID,
 			})
+
+			if rc, ok := p.client.(*runpod.Client); ok {
+				slot := vp.ProxySlot()
+				ep := fmt.Sprintf("http://10.254.254.%d:%d", 11+slot, port)
+				rc.RegisterAgentEndpoint(machineID, ep)
+			}
+
 			logger.Infof("Machine provisioned with ID: %s", machineID)
 		}
 
