@@ -116,5 +116,10 @@ chmod +x /usr/bin/wireproxy
 chmod +x /usr/bin/promtail
 chmod +x /container_agent
 
+chown root:root /root
+chown -R root:root /root/.ssh
+chmod 700 /root/.ssh
+chmod 600 /root/.ssh/authorized_keys
+
 {{ .Command }}
 `
