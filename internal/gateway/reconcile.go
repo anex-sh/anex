@@ -264,10 +264,6 @@ func (c *Controller) ensureGeneratedService(ctx context.Context, vs *gpuv1alpha1
 			Ports: []corev1.ServicePort{},
 		},
 	}
-	// ClusterIP "None" makes it headless; NodePort doesn't support headless so omit ClusterIP for NodePort.
-	if serviceType == corev1.ServiceTypeClusterIP {
-		desiredService.Spec.ClusterIP = "None"
-	}
 
 	// Build ports - map user-facing port to gateway port
 	for _, allocPort := range vs.Status.AllocatedPorts {
