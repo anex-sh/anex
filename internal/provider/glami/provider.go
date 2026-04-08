@@ -195,7 +195,7 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 		}
 
 		key := buildKey(&pod)
-		proxySlotIndex, _ := strconv.Atoi(pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"])
+		proxySlotIndex, _ := strconv.Atoi(pod.Annotations["anex.sh/proxy-slot-id"])
 		if provider.clientProxySettings[proxySlotIndex].Assigned {
 			log.G(ctx).Errorf("proxy slot %d already assigned, skipping pod %s", proxySlotIndex, key)
 			continue
@@ -353,7 +353,7 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	if err != nil {
 		return err
 	}
-	pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"] = strconv.Itoa(gatewaySlotId)
+	pod.Annotations["anex.sh/proxy-slot-id"] = strconv.Itoa(gatewaySlotId)
 
 	now := metav1.NewTime(time.Now())
 	pod.Status = v1.PodStatus{

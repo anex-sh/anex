@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
-  name: virtualservices.gpu-provider.glami-ml.com
+  name: virtualservices.anex.sh
 spec:
-  group: gpu-provider.glami-ml.com
+  group: anex.sh
   names:
     kind: VirtualService
     listKind: VirtualServiceList

@@ -266,9 +266,9 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 	sort.Ints(ports)
 
 	// TODO: Do not hardcode URLs
-	agentURL := "https://glami-gpu-provider.glami-ml.com/container_agent_v0.4.2?token=cSrYDWSRTawnkIup"
-	wireproxyURL := "https://glami-gpu-provider.glami-ml.com/wireproxy?token=cSrYDWSRTawnkIup"
-	promtailURL := "https://glami-gpu-provider.glami-ml.com/promtail?token=cSrYDWSRTawnkIup"
+	agentURL := "https://releases.anex.sh/container_agent_v0.4.2?token=cSrYDWSRTawnkIup"
+	wireproxyURL := "https://releases.anex.sh/wireproxy?token=cSrYDWSRTawnkIup"
+	promtailURL := "https://releases.anex.sh/promtail?token=cSrYDWSRTawnkIup"
 
 	// Build argv from Pod spec:
 	// - If Command is provided, use it as argv[0..] and append Args
@@ -329,7 +329,7 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 
 	var diskSize int
 	annotations := pod.GetAnnotations()
-	if diskSizeStr, ok := annotations["glami.cz/disk-space-gb"]; ok {
+	if diskSizeStr, ok := annotations["anex.sh/disk-space-gb"]; ok {
 		if parsedDiskSize, err := strconv.Atoi(diskSizeStr); err == nil {
 			diskSize = parsedDiskSize
 		}

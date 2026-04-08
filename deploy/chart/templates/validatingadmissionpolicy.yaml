@@ -40,11 +40,11 @@ spec:
     # Note: variables are not available in matchConditions, so we must inline the logic
     - name: has-virtual-label
       expression: |
-        (object.kind == 'Pod' && has(object.metadata.labels) && 'gpu-provider.glami.cz/virtual' in object.metadata.labels && object.metadata.labels['gpu-provider.glami.cz/virtual'] == 'true') ||
-        (object.kind == 'Deployment' && has(object.spec.template.metadata.labels) && 'gpu-provider.glami.cz/virtual' in object.spec.template.metadata.labels && object.spec.template.metadata.labels['gpu-provider.glami.cz/virtual'] == 'true') ||
-        (object.kind == 'StatefulSet' && has(object.spec.template.metadata.labels) && 'gpu-provider.glami.cz/virtual' in object.spec.template.metadata.labels && object.spec.template.metadata.labels['gpu-provider.glami.cz/virtual'] == 'true') ||
-        (object.kind == 'Job' && has(object.spec.template.metadata.labels) && 'gpu-provider.glami.cz/virtual' in object.spec.template.metadata.labels && object.spec.template.metadata.labels['gpu-provider.glami.cz/virtual'] == 'true') ||
-        (object.kind == 'CronJob' && has(object.spec.jobTemplate.spec.template.metadata.labels) && 'gpu-provider.glami.cz/virtual' in object.spec.jobTemplate.spec.template.metadata.labels && object.spec.jobTemplate.spec.template.metadata.labels['gpu-provider.glami.cz/virtual'] == 'true')
+        (object.kind == 'Pod' && has(object.metadata.labels) && 'anex.sh/virtual' in object.metadata.labels && object.metadata.labels['anex.sh/virtual'] == 'true') ||
+        (object.kind == 'Deployment' && has(object.spec.template.metadata.labels) && 'anex.sh/virtual' in object.spec.template.metadata.labels && object.spec.template.metadata.labels['anex.sh/virtual'] == 'true') ||
+        (object.kind == 'StatefulSet' && has(object.spec.template.metadata.labels) && 'anex.sh/virtual' in object.spec.template.metadata.labels && object.spec.template.metadata.labels['anex.sh/virtual'] == 'true') ||
+        (object.kind == 'Job' && has(object.spec.template.metadata.labels) && 'anex.sh/virtual' in object.spec.template.metadata.labels && object.spec.template.metadata.labels['anex.sh/virtual'] == 'true') ||
+        (object.kind == 'CronJob' && has(object.spec.jobTemplate.spec.template.metadata.labels) && 'anex.sh/virtual' in object.spec.jobTemplate.spec.template.metadata.labels && object.spec.jobTemplate.spec.template.metadata.labels['anex.sh/virtual'] == 'true')
   validations:
     - expression: |
         size(variables.podSpec.containers) == 1

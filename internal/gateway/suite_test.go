@@ -166,7 +166,7 @@ func setupTestEnv(t *testing.T) *testEnv {
 
 	// Create dynamic informer for VirtualService
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -252,7 +252,7 @@ func (te *testEnv) createVirtualService(t *testing.T, name, namespace string, po
 
 	vs := &gpuv1alpha1.VirtualService{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gpu-provider.glami-ml.com/v1alpha1",
+			APIVersion: "anex.sh/v1alpha1",
 			Kind:       "VirtualService",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -277,7 +277,7 @@ func (te *testEnv) createVirtualService(t *testing.T, name, namespace string, po
 	}
 
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -306,7 +306,7 @@ func (te *testEnv) getVirtualService(t *testing.T, name, namespace string) *gpuv
 	t.Helper()
 
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -329,7 +329,7 @@ func (te *testEnv) deleteVirtualService(t *testing.T, name, namespace string) {
 	t.Helper()
 
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -381,7 +381,7 @@ func (te *testEnv) waitForVirtualServiceDeleted(t *testing.T, name, namespace st
 	t.Helper()
 
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -450,7 +450,7 @@ func (te *testEnv) updateVirtualService(t *testing.T, name, namespace string, po
 	t.Helper()
 
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -501,7 +501,7 @@ func (te *testEnv) addAnnotationToVirtualService(t *testing.T, name, namespace, 
 	t.Helper()
 
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -551,7 +551,7 @@ func (te *testEnv) createVirtualPod(t *testing.T, name, namespace string, labels
 			Labels:    labels,
 			Annotations: map[string]string{
 				"virtual":                          "true",
-				"gpu-provider.glami.cz/proxy-slot-id": fmt.Sprintf("%d", proxySlotID),
+				"anex.sh/proxy-slot-id": fmt.Sprintf("%d", proxySlotID),
 			},
 		},
 		Spec: corev1.PodSpec{

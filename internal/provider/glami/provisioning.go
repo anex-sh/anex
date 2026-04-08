@@ -31,9 +31,9 @@ func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 	out.VastAI.VerifiedOnly = true
 
 	const (
-		sharedPrefix = "gpu-provider.glami.cz/"
-		vastaiPrefix = "vastai.gpu-provider.glami.cz/"
-		runpodPrefix = "runpod.gpu-provider.glami.cz/"
+		sharedPrefix = "anex.sh/"
+		vastaiPrefix = "vastai.anex.sh/"
+		runpodPrefix = "runpod.anex.sh/"
 	)
 	annotations := pod.GetAnnotations()
 

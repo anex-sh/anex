@@ -49,10 +49,10 @@ rules:
     verbs: ["get","list"]
 
   # Gateway Controller: VirtualService CRD
-  - apiGroups: ["gpu-provider.glami-ml.com"]
+  - apiGroups: ["anex.sh"]
     resources: ["virtualservices"]
     verbs: ["get","list","watch","update","patch"]
-  - apiGroups: ["gpu-provider.glami-ml.com"]
+  - apiGroups: ["anex.sh"]
     resources: ["virtualservices/status"]
     verbs: ["update","patch"]
 

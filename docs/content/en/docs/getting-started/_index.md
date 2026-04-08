@@ -97,9 +97,9 @@ metadata:
   name: dummy
   annotations:
     # Use annotations to specify machine requirements
-    gpu-provider.glami.cz/region: "europe"
-    gpu-provider.glami.cz/gpu-names: "RTX 4090,RTX 3090"
-    gpu-provider.glami.cz/price-max: "0.5"
+    anex.sh/region: "europe"
+    anex.sh/gpu-names: "RTX 4090,RTX 3090"
+    anex.sh/price-max: "0.5"
 spec:
   containers:
     - name: dummy

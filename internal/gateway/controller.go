@@ -46,7 +46,7 @@ import (
 
 const (
 	// Finalizer for VirtualService
-	VirtualServiceFinalizer = "gpu-provider.glami-ml.com/virtualservice-finalizer"
+	VirtualServiceFinalizer = "anex.sh/virtualservice-finalizer"
 
 	// Default port allocation range for VirtualServices
 	DefaultPortRangeStart = 6000
@@ -54,10 +54,10 @@ const (
 
 	// Annotations
 	AnnotationVirtualPod     = "virtual"
-	AnnotationProxySlotID    = "gpu-provider.glami.cz/proxy-slot-id"
-	AnnotationManagedBy      = "gpu-provider.glami-ml.com/managed-by"
+	AnnotationProxySlotID    = "anex.sh/proxy-slot-id"
+	AnnotationManagedBy      = "anex.sh/managed-by"
 	AnnotationManagedByValue = "virtualservice-controller"
-	AnnotationOwnerService   = "gpu-provider.glami-ml.com/owner-virtualservice"
+	AnnotationOwnerService   = "anex.sh/owner-virtualservice"
 
 	// Wireguard IP calculation
 	WireguardSubnetBase = "10.254.254."
@@ -480,7 +480,7 @@ func removeString(slice []string, s string) []string {
 func (c *Controller) updateVirtualService(ctx context.Context, vs *gpuv1alpha1.VirtualService) (*gpuv1alpha1.VirtualService, error) {
 	// Use dynamic client to update VirtualService
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -510,7 +510,7 @@ func (c *Controller) updateVirtualService(ctx context.Context, vs *gpuv1alpha1.V
 func (c *Controller) updateVirtualServiceStatus(ctx context.Context, vs *gpuv1alpha1.VirtualService) error {
 	// Use dynamic client to update VirtualService status subresource
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}

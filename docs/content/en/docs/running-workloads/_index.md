@@ -18,27 +18,27 @@ TCP Tunnels can be set by setting ENV variables in format `GW_TUNNEL_<port-numbe
 
 ## Machine Selection
 
-You can control machine selection by adding annotations to your Pod specification. All annotations use the prefix `gpu-provider.glami.cz/`.
+You can control machine selection by adding annotations to your Pod specification. All annotations use the prefix `anex.sh/`.
 
 #### Machine Quality
 
 |  | |      |                                                 |
 |------------|------------------------|------|-------------------------------------------------|
-| `verified-only` | Only select verified machines                          | `bool` | `gpu-provider.glami.cz/verified-only: "true"`   |
-| `datacenter-only` | Only select datacenter machines (no consumer hardware) | `bool` | `gpu-provider.glami.cz/datacenter-only: "true"` |
+| `verified-only` | Only select verified machines                          | `bool` | `anex.sh/verified-only: "true"`   |
+| `datacenter-only` | Only select datacenter machines (no consumer hardware) | `bool` | `anex.sh/datacenter-only: "true"` |
 
 #### Allowed Regions
 
 |  |  | |  |
 |------------|-------------|-------|---------|
-| `region` | Specify allowed regions (comma-separated) | `europe`, `north-america`, `asia-pacific`, `africa`, `south-america`, `oceania` | `gpu-provider.glami.cz/region: "europe,north-america"` |
+| `region` | Specify allowed regions (comma-separated) | `europe`, `north-america`, `asia-pacific`, `africa`, `south-america`, `oceania` | `anex.sh/region: "europe,north-america"` |
 
 #### GPU Names and SM
 
 |  |  |  |
 |------------|-------------|---------|
-| `gpu-names` | Comma-separated list of allowed GPU names | `gpu-provider.glami.cz/gpu-names: "RTX 4090,RTX 3090"` |
-| `compute-cap` | Comma-separated list of allowed CUDA compute capabilities | `gpu-provider.glami.cz/compute-cap: "8.6,8.9"` |
+| `gpu-names` | Comma-separated list of allowed GPU names | `anex.sh/gpu-names: "RTX 4090,RTX 3090"` |
+| `compute-cap` | Comma-separated list of allowed CUDA compute capabilities | `anex.sh/compute-cap: "8.6,8.9"` |
 
 #### GPU Filters
 
@@ -51,25 +51,25 @@ All numeric filters support three variants:
 
 |  |  |  |  |
 |------------|-------------|------|---------|
-| `gpu-count` | Number of GPUs | count | `gpu-provider.glami.cz/gpu-count: "2"` |
-| `vram` | VRAM per GPU | MB | `gpu-provider.glami.cz/vram: "24576"` |
-| `vram-total` | Total VRAM across all GPUs | MB | `gpu-provider.glami.cz/vram-total: "49152"` |
-| `vram-bandwidth` | GPU memory bandwidth | GB/s | `gpu-provider.glami.cz/vram-bandwidth: "900.0"` |
-| `tflops` | Total TFLOPS | TFLOPS | `gpu-provider.glami.cz/tflops: "82.0"` |
-| `cuda` | CUDA version | version | `gpu-provider.glami.cz/cuda: "12.1"` |
-| `cpu` | Number of CPU cores | cores | `gpu-provider.glami.cz/cpu: "8"` |
-| `ram` | System RAM | MB | `gpu-provider.glami.cz/ram: "32768"` |
-| `price` | Exact price per hour | USD/hour | `gpu-provider.glami.cz/price: "0.50"` |
-| `upload-speed` | Upload speed | Mbps | `gpu-provider.glami.cz/upload-speed: "1000"` |
-| `download-speed` | Download speed | Mbps | `gpu-provider.glami.cz/download-speed: "1000"` |
+| `gpu-count` | Number of GPUs | count | `anex.sh/gpu-count: "2"` |
+| `vram` | VRAM per GPU | MB | `anex.sh/vram: "24576"` |
+| `vram-total` | Total VRAM across all GPUs | MB | `anex.sh/vram-total: "49152"` |
+| `vram-bandwidth` | GPU memory bandwidth | GB/s | `anex.sh/vram-bandwidth: "900.0"` |
+| `tflops` | Total TFLOPS | TFLOPS | `anex.sh/tflops: "82.0"` |
+| `cuda` | CUDA version | version | `anex.sh/cuda: "12.1"` |
+| `cpu` | Number of CPU cores | cores | `anex.sh/cpu: "8"` |
+| `ram` | System RAM | MB | `anex.sh/ram: "32768"` |
+| `price` | Exact price per hour | USD/hour | `anex.sh/price: "0.50"` |
+| `upload-speed` | Upload speed | Mbps | `anex.sh/upload-speed: "1000"` |
+| `download-speed` | Download speed | Mbps | `anex.sh/download-speed: "1000"` |
 
 ##### VastAI-Specific Filters
 
 |  |  |  |  |
 |------------|-------------|------|---------|
-| `vastai-dlperf` | VastAI DLPerf benchmark score | score | `gpu-provider.glami.cz/vastai-dlperf: "100.0"` |
-| `vastai-dlperf-min` | Minimum DLPerf score | score | `gpu-provider.glami.cz/vastai-dlperf-min: "50.0"` |
-| `vastai-dlperf-max` | Maximum DLPerf score | score | `gpu-provider.glami.cz/vastai-dlperf-max: "150.0"` |
+| `vastai-dlperf` | VastAI DLPerf benchmark score | score | `anex.sh/vastai-dlperf: "100.0"` |
+| `vastai-dlperf-min` | Minimum DLPerf score | score | `anex.sh/vastai-dlperf-min: "50.0"` |
+| `vastai-dlperf-max` | Maximum DLPerf score | score | `anex.sh/vastai-dlperf-max: "150.0"` |
 
 ### Example Pod Specification
 
@@ -82,24 +82,24 @@ metadata:
   name: my-gpu-workload
   annotations:
     # Only verified datacenter machines in Europe
-    gpu-provider.glami.cz/verified-only: "true"
-    gpu-provider.glami.cz/datacenter-only: "true"
-    gpu-provider.glami.cz/region: "europe"
+    anex.sh/verified-only: "true"
+    anex.sh/datacenter-only: "true"
+    anex.sh/region: "europe"
     
     # GPU requirements: 2x RTX 4090 or RTX 3090
-    gpu-provider.glami.cz/gpu-names: "RTX 4090,RTX 3090"
-    gpu-provider.glami.cz/gpu-count: "2"
-    gpu-provider.glami.cz/vram-min: "20480"  # At least 20GB per GPU
+    anex.sh/gpu-names: "RTX 4090,RTX 3090"
+    anex.sh/gpu-count: "2"
+    anex.sh/vram-min: "20480"  # At least 20GB per GPU
     
     # CPU and RAM requirements
-    gpu-provider.glami.cz/cpu-min: "8"
-    gpu-provider.glami.cz/ram-min: "32768"  # At least 32GB RAM
+    anex.sh/cpu-min: "8"
+    anex.sh/ram-min: "32768"  # At least 32GB RAM
     
     # Price constraint
-    gpu-provider.glami.cz/price-max: "1.50"  # Maximum $1.50 per hour
+    anex.sh/price-max: "1.50"  # Maximum $1.50 per hour
     
     # Network requirements
-    gpu-provider.glami.cz/download-speed-min: "1000"  # At least 1Gbps
+    anex.sh/download-speed-min: "1000"  # At least 1Gbps
 spec:
   containers:
   - name: training-container

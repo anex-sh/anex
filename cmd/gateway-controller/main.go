@@ -122,7 +122,7 @@ func main() {
 
 	// Create dynamic informer for VirtualService
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}

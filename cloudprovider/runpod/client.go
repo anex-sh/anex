@@ -110,7 +110,7 @@ func (c *Client) SelectAndProvisionMachine(ctx context.Context, spec virtualpod.
 
 	// Disk size from annotation
 	diskSize := 30
-	if diskStr, ok := pod.GetAnnotations()["glami.cz/disk-space-gb"]; ok {
+	if diskStr, ok := pod.GetAnnotations()["anex.sh/disk-space-gb"]; ok {
 		if parsed, err := strconv.Atoi(diskStr); err == nil {
 			diskSize = parsed
 		}

@@ -112,8 +112,8 @@ func (vp *VirtualPod) SetMachine(machine *Machine) {
 	vp.mutex.RLock()
 	defer vp.mutex.RUnlock()
 	vp.machine = machine
-	vp.pod.ObjectMeta.Annotations["gpu-provider.glami.cz/machine-rent-id"] = machine.ID
-	vp.pod.ObjectMeta.Annotations["gpu-provider.glami.cz/machine-stable-id"] = machine.MachineID
+	vp.pod.ObjectMeta.Annotations["anex.sh/machine-rent-id"] = machine.ID
+	vp.pod.ObjectMeta.Annotations["anex.sh/machine-stable-id"] = machine.MachineID
 }
 
 func (vp *VirtualPod) SetAgentPort(port int) {

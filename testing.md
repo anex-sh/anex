@@ -45,7 +45,7 @@ var (
 
 func TestMain(m *testing.M) {
     // Setup envtest
-    // Install CRD from deploy/chart/crds/gpu-provider.glami-ml.com_virtualservices.yaml
+    // Install CRD from deploy/chart/crds/anex.sh_virtualservices.yaml
     // Create gateway pod
     // Start controller
     // Run tests
@@ -151,7 +151,7 @@ type ConfigureCall struct {
    - Service name matches VirtualService name
    - Service namespace matches VirtualService namespace
    - Service has OwnerReference pointing to VirtualService with `controller=true`
-   - Service has labels: `gpu-provider.glami-ml.com/managed-by: virtualservice-controller`
+   - Service has labels: `anex.sh/managed-by: virtualservice-controller`
    - Service type is ClusterIP
    - Service selector matches gateway pod labels (from test setup)
 
@@ -222,7 +222,7 @@ type ConfigureCall struct {
 **Steps**:
 
 1. Create a virtual pod with:
-   - `gpu-provider.glami.cz/proxy-slot-id: "3"`
+   - `anex.sh/proxy-slot-id: "3"`
    - Container ports: 8080, 9090 (sorted order)
 2. Create a VirtualService targeting port 9090
 3. Wait for reconcile
