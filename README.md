@@ -17,7 +17,7 @@ deployment:
   gateway:
     class: "node-port"
     domain: "your-minikube-ip"  # Use your machine's public IP
-    nodePort: 31000
+    nodePort: 31000             # start minikube with --ports=31000:31000/udp
 
 appConfig:
   cluster:
@@ -39,7 +39,7 @@ appConfig:
 helm upgrade --install anex --namespace anex --create-namespace \
   -f values.quickstart.yaml \
   oci://public.ecr.aws/m4v1f8q5/gpu-provider/helm \
-  --version 0.4.6
+  --version 0.4.5
 ```
 
 ### 3. Create llama-cpp.yaml
