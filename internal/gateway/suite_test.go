@@ -38,16 +38,16 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	gpuv1alpha1 "gitlab.devklarka.cz/ai/gpu-provider/api/v1alpha1"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/gateway/haproxy"
+	gpuv1alpha1 "github.com/anex-sh/anex/api/v1alpha1"
+	"github.com/anex-sh/anex/internal/gateway/haproxy"
 )
 
 const (
-	testNamespace        = "test-ns"
-	gatewayPodName       = "test-gateway"
-	gatewayPodNamespace  = "gateway-ns"
-	defaultTimeout       = 10 * time.Second
-	pollInterval         = 100 * time.Millisecond
+	testNamespace       = "test-ns"
+	gatewayPodName      = "test-gateway"
+	gatewayPodNamespace = "gateway-ns"
+	defaultTimeout      = 10 * time.Second
+	pollInterval        = 100 * time.Millisecond
 )
 
 const gatewayTestIP = "10.100.0.1"
@@ -550,7 +550,7 @@ func (te *testEnv) createVirtualPod(t *testing.T, name, namespace string, labels
 			Namespace: namespace,
 			Labels:    labels,
 			Annotations: map[string]string{
-				"virtual":                          "true",
+				"virtual":               "true",
 				"anex.sh/proxy-slot-id": fmt.Sprintf("%d", proxySlotID),
 			},
 		},

@@ -22,7 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	gpuv1alpha1 "gitlab.devklarka.cz/ai/gpu-provider/api/v1alpha1"
+	gpuv1alpha1 "github.com/anex-sh/anex/api/v1alpha1"
 )
 
 // TestVirtualServiceBasicLifecycle tests the basic lifecycle of a VirtualService:

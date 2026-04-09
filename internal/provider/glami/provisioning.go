@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anex-sh/anex/cloudprovider/runpod"
+	"github.com/anex-sh/anex/virtualpod"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider/runpod"
-	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	"k8s.io/api/core/v1"
 )
 

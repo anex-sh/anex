@@ -1,8 +1,8 @@
 package main
 
 import (
-	"gitlab.devklarka.cz/ai/gpu-provider/cmd/virtual-kubelet/internal/provider"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/provider/glami"
+	"github.com/anex-sh/anex/cmd/virtual-kubelet/internal/provider"
+	"github.com/anex-sh/anex/internal/provider/glami"
 )
 
 func registerVastAI(s *provider.Store) {

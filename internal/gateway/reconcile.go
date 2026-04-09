@@ -30,8 +30,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog/v2"
 
-	gpuv1alpha1 "gitlab.devklarka.cz/ai/gpu-provider/api/v1alpha1"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/gateway/haproxy"
+	gpuv1alpha1 "github.com/anex-sh/anex/api/v1alpha1"
+	"github.com/anex-sh/anex/internal/gateway/haproxy"
 )
 
 func (c *Controller) reconcileVirtualService(ctx context.Context, vs *gpuv1alpha1.VirtualService) error {

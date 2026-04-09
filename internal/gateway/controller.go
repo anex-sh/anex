@@ -39,9 +39,9 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 
-	gpuv1alpha1 "gitlab.devklarka.cz/ai/gpu-provider/api/v1alpha1"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/gateway/haproxy"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/gateway/portalloc"
+	gpuv1alpha1 "github.com/anex-sh/anex/api/v1alpha1"
+	"github.com/anex-sh/anex/internal/gateway/haproxy"
+	"github.com/anex-sh/anex/internal/gateway/portalloc"
 )
 
 const (

@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anex-sh/anex/internal/utils"
+	"github.com/anex-sh/anex/virtualpod"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/utils"
-	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 )

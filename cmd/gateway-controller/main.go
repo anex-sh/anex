@@ -35,8 +35,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 
-	gpuv1alpha1 "gitlab.devklarka.cz/ai/gpu-provider/api/v1alpha1"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/gateway"
+	gpuv1alpha1 "github.com/anex-sh/anex/api/v1alpha1"
+	"github.com/anex-sh/anex/internal/gateway"
 )
 
 var (

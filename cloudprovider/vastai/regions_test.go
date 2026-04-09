@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
+	"github.com/anex-sh/anex/virtualpod"
 )
 
 func TestMapRegion(t *testing.T) {

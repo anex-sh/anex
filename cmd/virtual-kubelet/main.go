@@ -22,6 +22,10 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/anex-sh/anex/cmd/virtual-kubelet/internal/commands/providers"
+	"github.com/anex-sh/anex/cmd/virtual-kubelet/internal/commands/root"
+	"github.com/anex-sh/anex/cmd/virtual-kubelet/internal/commands/version"
+	"github.com/anex-sh/anex/cmd/virtual-kubelet/internal/provider"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -29,10 +33,6 @@ import (
 	logruslogger "github.com/virtual-kubelet/virtual-kubelet/log/logrus"
 	"github.com/virtual-kubelet/virtual-kubelet/trace"
 	"github.com/virtual-kubelet/virtual-kubelet/trace/opencensus"
-	"gitlab.devklarka.cz/ai/gpu-provider/cmd/virtual-kubelet/internal/commands/providers"
-	"gitlab.devklarka.cz/ai/gpu-provider/cmd/virtual-kubelet/internal/commands/root"
-	"gitlab.devklarka.cz/ai/gpu-provider/cmd/virtual-kubelet/internal/commands/version"
-	"gitlab.devklarka.cz/ai/gpu-provider/cmd/virtual-kubelet/internal/provider"
 )
 
 var (

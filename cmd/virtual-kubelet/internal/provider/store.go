@@ -3,8 +3,8 @@ package provider
 import (
 	"sync"
 
+	"github.com/anex-sh/anex/internal/manager"
 	"github.com/virtual-kubelet/virtual-kubelet/errdefs"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/manager"
 )
 
 // Store is used for registering/fetching providers

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"text/template"
 
+	"github.com/anex-sh/anex/internal/agent"
+	"github.com/anex-sh/anex/virtualpod"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/agent"
-	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 )

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
+	"github.com/anex-sh/anex/virtualpod"
 )
 
 func TestBuildMachineLabel(t *testing.T) {
