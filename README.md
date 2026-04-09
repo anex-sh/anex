@@ -2,6 +2,128 @@
 
 Anex lets you run GPU workloads on cheap cloud GPU providers (like [VastAI](https://vast.ai/)) while managing them through your existing Kubernetes cluster. You write standard Kubernetes manifests, and Anex takes care of renting machines, setting up networking, and making your remote GPU pods feel like they're part of your cluster.
 
+> **⚠️ Experimental Version**: This is an experimental version of Anex. We are aiming to publish a stable release by the end of April 2026. For now, you can use our Docker images and binaries to test the project.
+
+---
+
+## Quick Setup
+
+Get started quickly using the pre-built images from our public registry:
+
+### 1. Create values.quickstart.yaml
+
+```yaml
+deployment:
+  gateway:
+    class: "node-port"
+    domain: "your-minikube-ip"  # Use your machine's public IP
+    nodePort: 31000
+
+appConfig:
+  cluster:
+    clusterUUID: "your-cluster-uuid"  # Must be unique in your VastAI account
+
+  cloudProvider:
+    vastAI:
+      apiKey: "your-vastai-api-key"   # Get from https://cloud.vast.ai/account/
+
+  virtualNode:
+    nodeName: "virtual-node-name"     # Must be unique in your cluster
+    labels:
+      node-provider: vastai
+```
+
+### 2. Deploy Anex
+
+```bash
+helm upgrade --install anex --namespace anex --create-namespace \
+  -f values.quickstart.yaml \
+  oci://public.ecr.aws/m4v1f8q5/gpu-provider/helm \
+  --version 0.4.6
+```
+
+### 3. Create llama-cpp.yaml
+
+```yaml
+# VirtualService: makes the remote pod reachable as a Kubernetes service
+apiVersion: anex.sh/v1alpha1
+kind: VirtualService
+metadata:
+  name: llama
+spec:
+  gateway:
+    selector:
+      custom-gateway: "true"
+  service:
+    selector:
+      app: llama
+    ports:
+      - name: http
+        port: 80
+        targetPort: 8090
+---
+# The llama.cpp server pod — runs on a rented GPU
+apiVersion: v1
+kind: Pod
+metadata:
+  name: llama
+  labels:
+    app: llama
+  annotations:
+    gpu-provider.glami.cz/region: "europe"
+    gpu-provider.glami.cz/gpu-names: "RTX 4090,RTX 3090"
+    gpu-provider.glami.cz/price-max: "0.5"
+    gpu-provider.glami.cz/verified-only: "true"
+    gpu-provider.glami.cz/disk-space-gb: "100"
+    virtual: "true"
+spec:
+  containers:
+    - name: llama
+      image: ghcr.io/ggml-org/llama.cpp:server-cuda
+      command:
+        - /bin/sh
+        - -c
+        - |
+          apt-get update && apt-get install -y wget &&
+          wget -O /tmp/model.gguf \
+            "https://huggingface.co/hugging-quants/Llama-3.2-1B-Instruct-Q4_K_M-GGUF/resolve/main/llama-3.2-1b-instruct-q4_k_m.gguf" &&
+          /app/llama-server \
+            -m /tmp/model.gguf \
+            --port 8090 \
+            --host 0.0.0.0 \
+            -ngl 99
+      ports:
+        - containerPort: 8090
+      resources:
+        limits:
+          nvidia.com/gpu: "1"
+  nodeSelector:
+    node-provider: vastai
+  tolerations:
+    - key: "virtual-kubelet.io/provider"
+      operator: "Equal"
+      value: "vastai"
+      effect: "NoSchedule"
+    - key: "ignore-taint.cluster-autoscaler.kubernetes.io/manual-ignore"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+```
+
+### 4. Deploy the workload
+
+```bash
+kubectl apply -f llama-cpp.yaml -n anex
+```
+
+Then forward the port to access it:
+
+```bash
+kubectl port-forward service/llama 8080:80 -n anex
+```
+
+See the [Deployment Examples](#deployment-examples) section below for more examples including AWS with Ingress.
+
 ---
 
 ## Building from Source
@@ -68,7 +190,7 @@ Anex is installed via a Helm chart. The configuration differs slightly depending
 
 ### Installing on AWS EKS
 
-On AWS, Anex uses a LoadBalancer to expose the gateway. Create a file called `ingress-values.yaml`:
+On AWS, Anex uses a LoadBalancer to expose the gateway. Create a file called `values.quickstart.yaml`:
 
 ```yaml
 deployment:
@@ -108,7 +230,7 @@ Then deploy:
 helm upgrade --install anex ./deploy/chart \
   --namespace anex \
   --create-namespace \
-  -f ingress-values.yaml
+  -f values.quickstart.yaml
 ```
 
 ### Installing on miniKube
@@ -123,7 +245,7 @@ minikube start --driver=docker --listen-address=0.0.0.0 --ports=31000:31000/udp
 
 If using AWS EC2, don't forget to allow UDP port 31000 in the Security Groups.
 
-Create a file called `values.yaml`:
+Create a file called `values.quickstart.yaml`:
 
 ```yaml
 deployment:
@@ -163,7 +285,7 @@ Then deploy:
 helm upgrade --install anex ./deploy/chart \
   --namespace anex \
   --create-namespace \
-  -f values.yaml
+  -f values.quickstart.yaml
 ```
 
 ---
@@ -178,11 +300,11 @@ Annotations on the pod tell Anex what kind of GPU machine to rent:
 
 ```yaml
 annotations:
-  anex.sh/region: "europe"              # Preferred region
-  anex.sh/gpu-names: "RTX 4090,RTX 3090"  # Acceptable GPU types (comma-separated)
-  anex.sh/price-max: "0.5"             # Maximum price per hour in USD
-  anex.sh/verified-only: "true"        # Only use verified/trusted hosts
-  anex.sh/disk-space-gb: "100"         # Disk space to request (in GB)
+  gpu-provider.glami.cz/region: "europe"              # Preferred region
+  gpu-provider.glami.cz/gpu-names: "RTX 4090,RTX 3090"  # Acceptable GPU types (comma-separated)
+  gpu-provider.glami.cz/price-max: "0.5"             # Maximum price per hour in USD
+  gpu-provider.glami.cz/verified-only: "true"        # Only use verified/trusted hosts
+  gpu-provider.glami.cz/disk-space-gb: "100"         # Disk space to request (in GB)
   virtual: "true"                       # Required — marks this pod as a virtual pod
 ```
 
@@ -242,7 +364,7 @@ This example runs [llama.cpp](https://github.com/ggml-org/llama.cpp) server on a
 
 **What you get:** A remote GPU running llama.cpp with an OpenAI-compatible API, accessible from your laptop at `localhost:8080`.
 
-**llama-local.yaml:**
+**llama-cpp.yaml:**
 ```yaml
 # VirtualService: makes the remote pod reachable as a Kubernetes service
 apiVersion: anex.sh/v1alpha1
@@ -269,11 +391,11 @@ metadata:
   labels:
     app: llama
   annotations:
-    anex.sh/region: "europe"
-    anex.sh/gpu-names: "RTX 4090,RTX 3090"
-    anex.sh/price-max: "0.5"
-    anex.sh/verified-only: "true"
-    anex.sh/disk-space-gb: "100"
+    gpu-provider.glami.cz/region: "europe"
+    gpu-provider.glami.cz/gpu-names: "RTX 4090,RTX 3090"
+    gpu-provider.glami.cz/price-max: "0.5"
+    gpu-provider.glami.cz/verified-only: "true"
+    gpu-provider.glami.cz/disk-space-gb: "100"
     virtual: "true"
 spec:
   containers:
@@ -312,7 +434,7 @@ spec:
 **Step 1: Deploy it**
 
 ```bash
-kubectl apply -f llama-local.yaml
+kubectl apply -f llama-cpp.yaml
 ```
 
 Anex will find a matching GPU machine, rent it, download the model, and start the llama.cpp server. This can take a few minutes.
@@ -436,7 +558,7 @@ metadata:
     gpu-provider.glami.cz/gpu-names: "RTX 4090,RTX 3090"
     gpu-provider.glami.cz/price-max: "0.5"
     gpu-provider.glami.cz/verified-only: "true"
-    glami.cz/disk-space-gb: "100"
+    gpu-provider.glami.cz/disk-space-gb: "100"
     virtual: "true"
 spec:
   containers:
