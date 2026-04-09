@@ -3,7 +3,7 @@ GPU Provider — Architecture
 Components and responsibilities
 - Virtual Kubelet provider (VK)
   - Entrypoint: cmd/virtual-kubelet/main.go (sets logrus JSON, cobra root, registers provider)
-  - Provider impl: internal/provider/glami/provider.go (Pod CRUD against external cloud; annotates pods with gpu-provider.glami.cz/proxy-slot-id; status updates; lifecycle reconcile)
+  - Provider impl: internal/provider/glami/provider.go (Pod CRUD against external cloud; annotates pods with anex.sh/proxy-slot-id; status updates; lifecycle reconcile)
   - Cloud provider client(s): cloudprovider/vastai/* (VastAI API), cloudprovider/mock/* (mock)
   - Virtual pod abstraction: virtualpod/virtualpod.go (agent HTTP status polling, restart logic, container state transitions)
 
@@ -21,13 +21,13 @@ Components and responsibilities
 
 - API and CRD
   - Types: api/v1alpha1/virtualservice_types.go (spec/service/gateway, status/allocatedPorts/conditions, constants)
-  - CRD: deploy/chart/crds/gpu-provider.glami-ml.com_virtualservices.yaml
+  - CRD: deploy/chart/crds/anex.sh_virtualservices.yaml
 
 Key flows
 
 1) Virtual Pod lifecycle (VK provider)
 - CreatePod:
-  - Rejects multi-container pods; reserves a gateway slot and annotates pod with gpu-provider.glami.cz/proxy-slot-id (internal/provider/glami/provider.go: CreatePod)
+  - Rejects multi-container pods; reserves a gateway slot and annotates pod with anex.sh/proxy-slot-id (internal/provider/glami/provider.go: CreatePod)
   - Initializes Pod status to Pending and ContainerWaiting; sets up config maps; constructs a virtualpod.VirtualPod and starts async provisioning (initializeVirtualPod) (internal/provider/glami/provider.go)
 - Agent integration:
   - virtualpod.GetAgentAddress derives http://10.254.254.(11+slot):agentPort (virtualpod/virtualpod.go)

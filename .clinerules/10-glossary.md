@@ -28,8 +28,8 @@ Gateway Controller
 
 VirtualService (CRD)
 - Meaning: The single source of truth for Service-like L4 targeting of virtual pods.
-- Also known as / synonyms: vsvc, gpu-provider.glami-ml.com/v1alpha1 VirtualService
-- Where in code (paths): api/v1alpha1/virtualservice_types.go; deploy/chart/crds/gpu-provider.glami-ml.com_virtualservices.yaml
+- Also known as / synonyms: vsvc, anex.sh/v1alpha1 VirtualService
+- Where in code (paths): api/v1alpha1/virtualservice_types.go; deploy/chart/crds/anex.sh_virtualservices.yaml
 - Notes / gotchas: Only TCP; targetPort must be int; no named ports or sessionAffinity (internal/gateway/reconcile.go: validateVirtualService).
 
 AllocatedPorts
@@ -59,7 +59,7 @@ Wireproxy
 Proxy Slot ID
 - Meaning: Integer slot assigned to each virtual pod to derive WG IP and port offsets.
 - Also known as / synonyms: gateway slot, slot index
-- Where in code (paths): Annotation key gpu-provider.glami.cz/proxy-slot-id (internal/gateway/controller.go); assigned in internal/provider/glami/provider.go (CreatePod)
+- Where in code (paths): Annotation key anex.sh/proxy-slot-id (internal/gateway/controller.go); assigned in internal/provider/glami/provider.go (CreatePod)
 - Notes / gotchas: Used to compute wg IP and wireproxy port formula.
 
 Generated Service

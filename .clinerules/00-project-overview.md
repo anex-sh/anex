@@ -11,9 +11,9 @@ What this repo is / does
 - Ships a lightweight Container Agent binary that runs in the remote container environment, exposes status over HTTP, and can bootstrap wireproxy/promtail as needed.
   - Entrypoint: cmd/container-agent/main.go
   - Agent: internal/agent/agent.go, internal/agent/server.go
-- Defines a VirtualService CRD (gpu-provider.glami-ml.com/v1alpha1) as the single source of truth for Service-like L4 targeting of virtual pods and creates a corresponding ClusterIP Service pointing at the Gateway.
+- Defines a VirtualService CRD (anex.sh/v1alpha1) as the single source of truth for Service-like L4 targeting of virtual pods and creates a corresponding ClusterIP Service pointing at the Gateway.
   - Types: api/v1alpha1/virtualservice_types.go
-  - CRD manifest: deploy/chart/crds/gpu-provider.glami-ml.com_virtualservices.yaml
+  - CRD manifest: deploy/chart/crds/anex.sh_virtualservices.yaml
 
 Non-goals and constraints
 - Single-container Pods only on the virtual node (enforced in internal/provider/glami/provider.go: CreatePod rejects multiple containers).
@@ -39,7 +39,7 @@ Start here pointers (auditable code)
   - internal/gateway/portalloc/allocator.go
 - CRD and API types:
   - api/v1alpha1/virtualservice_types.go
-  - deploy/chart/crds/gpu-provider.glami-ml.com_virtualservices.yaml
+  - deploy/chart/crds/anex.sh_virtualservices.yaml
 - Agent runtime:
   - cmd/container-agent/main.go
   - internal/agent/agent.go
@@ -48,12 +48,12 @@ Start here pointers (auditable code)
   - virtualpod/virtualpod.go
 
 Current state notes
-- CRD group/version: gpu-provider.glami-ml.com/v1alpha1 (api/v1alpha1/groupversion_info.go).
+- CRD group/version: anex.sh/v1alpha1 (api/v1alpha1/groupversion_info.go).
 - VirtualService status carries allocatedPorts and standard conditions; controller updates .status via dynamic client (internal/gateway/controller.go:updateVirtualServiceStatus, internal/gateway/reconcile.go:setConditionAndUpdate).
 - Generated Service:
   - Name/namespace = VirtualService name/namespace; type ClusterIP; selector = gateway pod labels; targetPort = allocated gatewayPort (internal/gateway/reconcile.go: ensureGeneratedService).
 - HAProxy is configured via the Data Plane API (HTTP or Unix socket) with transactions and force_reload (internal/gateway/haproxy/manager.go).
 - Wireguard/wireproxy:
-  - Gateway assigns proxy slot ids; provider annotates pods with gpu-provider.glami.cz/proxy-slot-id (internal/provider/glami/provider.go).
+  - Gateway assigns proxy slot ids; provider annotates pods with anex.sh/proxy-slot-id (internal/provider/glami/provider.go).
   - Agent can render wireproxy config and run it; status exposed on /status (internal/agent/*).
 - Examples for VirtualService live under examples/ (e.g., examples/virtualservice-basic.yaml). If behavior differs, the above code paths are the source of truth.
