@@ -29,7 +29,7 @@ deployment:
       enabled: true
       image:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet"
-        tag: "v0.4.6"
+        tag: ""
         pullPolicy: Always
 
       resources: {}
@@ -43,7 +43,7 @@ deployment:
     gateway:
       image:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/gateway"
-        tag: "v0.4.6"
+        tag: ""
         pullPolicy: Always
 
       # TODO: Remove requirements
