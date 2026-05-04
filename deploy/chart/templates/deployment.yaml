@@ -30,7 +30,7 @@ spec:
       # Gateway WG secrets init
       initContainers:
         - name: gateway-init
-          image: {{ .Values.deployment.containers.gateway.image.repository }}:{{ .Values.deployment.containers.gateway.image.tag | default .Chart.AppVersion }}
+          image: {{ .Values.deployment.containers.gateway.image.repository }}:{{ .Values.deployment.containers.gateway.image.tag | default .Chart.Version }}
           imagePullPolicy: {{ .Values.deployment.containers.gateway.image.pullPolicy }}
           command: ["/gateway-init"]
           env:
@@ -68,7 +68,7 @@ spec:
         {{- if .Values.deployment.containers.virtualKubelet.enabled }}
         # Virtual Kubelet
         - name: virtual-kubelet
-          image: {{ .Values.deployment.containers.virtualKubelet.image.repository }}:{{ .Values.deployment.containers.virtualKubelet.image.tag | default .Chart.AppVersion }}
+          image: {{ .Values.deployment.containers.virtualKubelet.image.repository }}:{{ .Values.deployment.containers.virtualKubelet.image.tag | default .Chart.Version }}
           imagePullPolicy: {{ .Values.deployment.containers.virtualKubelet.image.pullPolicy }}
           args:
             - --provider-config=/virtual-kubelet-config.yaml
