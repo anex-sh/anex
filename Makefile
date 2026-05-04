@@ -178,10 +178,10 @@ kind-stop:
 	kind delete cluster --name local
 
 helm-release:
-	@echo "Packaging and pushing Helm chart..."
-	helm package deploy/chart
-	helm push helm-* oci://public.ecr.aws/m4v1f8q5/gpu-provider
-	rm helm-*
+	@echo "Packaging Helm chart (version=$(VERSION))..."
+	helm package deploy/chart --version $(VERSION) --app-version v$(VERSION)
+	helm push helm-$(VERSION).tgz oci://public.ecr.aws/m4v1f8q5/gpu-provider
+	rm helm-$(VERSION).tgz
 
 # Install controller-gen if not present
 install-controller-gen:

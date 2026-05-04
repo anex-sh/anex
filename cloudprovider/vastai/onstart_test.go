@@ -12,7 +12,6 @@ func TestGenerateOnStartScriptRendersParams(t *testing.T) {
 		AgentURL:     "https://agent/bin",
 		WireproxyURL: "https://wireproxy/bin",
 		PromtailURL:  "https://promtail/bin",
-		AuthToken:    "secrettok",
 	}
 	out := GenerateOnStartScript(params)
 	checks := []string{

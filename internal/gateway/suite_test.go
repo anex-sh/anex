@@ -534,7 +534,7 @@ func (te *testEnv) createVirtualPod(t *testing.T, name, namespace string, labels
 			Namespace: namespace,
 			Labels:    labels,
 			Annotations: map[string]string{
-				"virtual":                             "true",
+				"virtual":               "true",
 				"anex.sh/proxy-slot-id": fmt.Sprintf("%d", proxySlotID),
 			},
 		},
