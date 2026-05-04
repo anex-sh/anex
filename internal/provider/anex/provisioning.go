@@ -1,4 +1,4 @@
-package glami
+package anex
 
 import (
 	"context"
@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anex-sh/anex/cloudprovider/runpod"
+	"github.com/anex-sh/anex/virtualpod"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider/runpod"
-	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	"k8s.io/api/core/v1"
 )
 
@@ -31,9 +31,9 @@ func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 	out.VastAI.VerifiedOnly = true
 
 	const (
-		sharedPrefix = "gpu-provider.glami.cz/"
-		vastaiPrefix = "vastai.gpu-provider.glami.cz/"
-		runpodPrefix = "runpod.gpu-provider.glami.cz/"
+		sharedPrefix = "anex.sh/"
+		vastaiPrefix = "vastai.anex.sh/"
+		runpodPrefix = "runpod.anex.sh/"
 	)
 	annotations := pod.GetAnnotations()
 
@@ -204,8 +204,8 @@ func newMachineSpecification(pod *v1.Pod) virtualpod.MachineSpecification {
 			out.DownloadSpeedMax = parseFloat(value)
 
 		// Container Disk
-		case setting == "container-disk-gb":
-			out.ContainerDiskInGB = parseInt(value)
+		case setting == "disk-space-gb":
+			out.DiskSpaceInGB = parseFloat(value)
 
 		// Disk Bandwidth
 		case setting == "disk-bw":
@@ -483,7 +483,8 @@ func (p *Provider) selectAndProvisionMachine(ctx context.Context, pod *v1.Pod, p
 	logger.Info("Selecting and provisioning machine")
 
 	machineSpec := newMachineSpecification(pod)
-	bo := backoff.NewConstantBackOff(60 * time.Second)
+	var bo backoff.BackOff = backoff.NewConstantBackOff(60 * time.Second)
+	bo = backoff.WithContext(bo, ctx)
 
 	op := func() error {
 		var opErr error

@@ -5,13 +5,13 @@ Use these terms consistently across issues, code, and documentation.
 Virtual Node
 - Meaning: A Kubernetes node abstraction backed by Virtual Kubelet that schedules Pods to an external GPU provider instead of a real kubelet.
 - Also known as / synonyms: VK node, virtual-kubelet node
-- Where in code (paths): cmd/virtual-kubelet/main.go; internal/provider/glami/provider.go
-- Notes / gotchas: Only single-container Pods are supported by the provider (internal/provider/glami/provider.go: CreatePod).
+- Where in code (paths): cmd/virtual-kubelet/main.go; internal/provider/anex/provider.go
+- Notes / gotchas: Only single-container Pods are supported by the provider (internal/provider/anex/provider.go: CreatePod).
 
 Virtual Pod
 - Meaning: A Kubernetes Pod scheduled to the Virtual Node whose container actually runs on an external provider machine.
 - Also known as / synonyms: remote pod, virtualized pod
-- Where in code (paths): virtualpod/virtualpod.go (abstraction), internal/provider/glami/provider.go (lifecycle), internal/gateway/controller.go (matching)
+- Where in code (paths): virtualpod/virtualpod.go (abstraction), internal/provider/anex/provider.go (lifecycle), internal/gateway/controller.go (matching)
 - Notes / gotchas: Must be annotated virtual: "true" to be eligible for VirtualService selection (internal/gateway/controller.go: AnnotationVirtualPod and checks).
 
 Gateway
@@ -28,8 +28,8 @@ Gateway Controller
 
 VirtualService (CRD)
 - Meaning: The single source of truth for Service-like L4 targeting of virtual pods.
-- Also known as / synonyms: vsvc, gpu-provider.glami-ml.com/v1alpha1 VirtualService
-- Where in code (paths): api/v1alpha1/virtualservice_types.go; deploy/chart/crds/gpu-provider.glami-ml.com_virtualservices.yaml
+- Also known as / synonyms: vsvc, anex.sh/v1alpha1 VirtualService
+- Where in code (paths): api/v1alpha1/virtualservice_types.go; deploy/chart/crds/anex.sh_virtualservices.yaml
 - Notes / gotchas: Only TCP; targetPort must be int; no named ports or sessionAffinity (internal/gateway/reconcile.go: validateVirtualService).
 
 AllocatedPorts
@@ -59,7 +59,7 @@ Wireproxy
 Proxy Slot ID
 - Meaning: Integer slot assigned to each virtual pod to derive WG IP and port offsets.
 - Also known as / synonyms: gateway slot, slot index
-- Where in code (paths): Annotation key gpu-provider.glami.cz/proxy-slot-id (internal/gateway/controller.go); assigned in internal/provider/glami/provider.go (CreatePod)
+- Where in code (paths): Annotation key anex.sh/proxy-slot-id (internal/gateway/controller.go); assigned in internal/provider/anex/provider.go (CreatePod)
 - Notes / gotchas: Used to compute wg IP and wireproxy port formula.
 
 Generated Service
@@ -86,10 +86,10 @@ Condition Types/Reasons (VirtualService)
 - Where in code (paths): api/v1alpha1/virtualservice_types.go (ConditionTypeReady, Reason*); internal/gateway/reconcile.go (setConditionAndUpdate)
 - Notes / gotchas: Ready=True when Service + HAProxy configured; UnsupportedSpec and ServiceConflict are terminal until fixed.
 
-Provider (Glami Provider)
+Provider
 - Meaning: Virtual Kubelet provider implementing Pod lifecycle against external cloud (VastAI/Mock).
 - Also known as / synonyms: VK provider
-- Where in code (paths): internal/provider/glami/*
+- Where in code (paths): internal/provider/anex/*
 - Notes / gotchas: Annotates pods with proxy-slot-id; manages machine lifecycle; reconciles container state via Agent.
 
 Container Agent

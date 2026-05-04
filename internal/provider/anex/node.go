@@ -1,4 +1,4 @@
-package glami
+package anex
 
 import (
 	"context"
@@ -16,6 +16,10 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	v2 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	GarbageCollectorInterval = 15 * time.Minute
 )
 
 // RunMetricsServer starts an HTTP server that serves Prometheus metrics on /metrics.
@@ -179,7 +183,7 @@ func (p *Provider) ConfigureNode(ctx context.Context, n *v1.Node) {
 
 	// Start the garbage collection
 	go func(ctx context.Context) {
-		ticker := time.NewTicker(1 * time.Minute)
+		ticker := time.NewTicker(GarbageCollectorInterval)
 		defer ticker.Stop()
 
 		for {

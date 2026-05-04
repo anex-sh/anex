@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
+	"github.com/anex-sh/anex/virtualpod"
 )
 
 type PortInfo struct {
@@ -230,6 +230,11 @@ func buildInstanceFilters(s virtualpod.MachineSpecification) map[string]interfac
 		} else if s.PriceMax != nil {
 			filters["dph_total"] = FilterOp{"lte": *s.PriceMax}
 		}
+	}
+
+	// Disk
+	if s.DiskSpaceInGB != nil {
+		filters["disk_space"] = FilterOp{"gte": *s.DiskSpaceInGB}
 	}
 
 	// VastAI DLPerf (dlperf)

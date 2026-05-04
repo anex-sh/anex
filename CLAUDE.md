@@ -35,15 +35,15 @@ A **Virtual Kubelet provider** that exposes containers running on rented GPU mac
 
 **Cloud Provider Interface** — `cloudprovider.Client` defines the contract for machine lifecycle ops. Active provider selected via `cloudProvider.active` config (`vastai`, `runpod`, `mock`). RunPod lacks some ops (bans, `MapRunningMachines`, `CopyFileToMachine`, `RenewMachineKeys`).
 
-**MachineSpecification** — unified machine filtering struct in `virtualpod/machine.go`. Shared filters (GPU names, regions, VRAM, RAM, CPU, price) via `gpu-provider.glami.cz/` annotations. Provider-specific filters via `vastai.gpu-provider.glami.cz/` and `runpod.gpu-provider.glami.cz/` prefixes. RunPod uses a hardcoded GPU price dictionary for local filtering.
+**MachineSpecification** — unified machine filtering struct in `virtualpod/machine.go`. Shared filters (GPU names, regions, VRAM, RAM, CPU, price) via `anex.sh/` annotations. Provider-specific filters via `vastai.anex.sh/` and `runpod.anex.sh/` prefixes. RunPod uses a hardcoded GPU price dictionary for local filtering.
 
 **Wstunnel** — RunPod blocks UDP, so Wireguard traffic is tunneled over WebSocket. Gateway runs wstunnel server on TCP 51821 forwarding to local UDP 51820. RunPod containers run wstunnel client connecting via `ws://gateway:51821`.
 
 **Gateway** — singleton networking pod that terminates Wireguard and runs HAProxy. Also runs wstunnel server for RunPod connectivity. Controller requires its pod name/namespace at startup.
 
-**VirtualService (CRD, `vsvc`)** — `gpu-provider.glami-ml.com/v1alpha1`. Source of truth for L4 exposure of virtual pods. TCP only; `targetPort` must be an int; no named ports or sessionAffinity. Controller creates a ClusterIP Service with the same name/namespace that selects the Gateway pod; `targetPort` = allocated `gatewayPort`.
+**VirtualService (CRD, `vsvc`)** — `anex.sh/v1alpha1`. Source of truth for L4 exposure of virtual pods. TCP only; `targetPort` must be an int; no named ports or sessionAffinity. Controller creates a ClusterIP Service with the same name/namespace that selects the Gateway pod; `targetPort` = allocated `gatewayPort`.
 
-**Proxy Slot ID** — integer assigned per virtual pod. Annotation: `gpu-provider.glami.cz/proxy-slot-id`.
+**Proxy Slot ID** — integer assigned per virtual pod. Annotation: `anex.sh/proxy-slot-id`.
 - Wireguard IP: `10.254.254.(11 + slotID)`
 - Wireproxy backend port: `10000 + slotID*100 + portID` (portID = index of targetPort in pod's sorted container ports)
 
@@ -53,9 +53,9 @@ A **Virtual Kubelet provider** that exposes containers running on rented GPU mac
 
 | Path | Purpose |
 |---|---|
-| `internal/provider/glami/provider.go` | Pod CRUD; assigns proxy slots; annotates pods |
-| `internal/provider/glami/provisioning.go` | Machine lifecycle (rent → ready → teardown) |
-| `internal/provider/glami/config.go` | YAML config loading + env var overrides |
+| `internal/provider/anex/provider.go` | Pod CRUD; assigns proxy slots; annotates pods |
+| `internal/provider/anex/provisioning.go` | Machine lifecycle (rent → ready → teardown) |
+| `internal/provider/anex/config.go` | YAML config loading + env var overrides |
 | `virtualpod/virtualpod.go` | VirtualPod struct; agent HTTP polling; restart logic |
 | `virtualpod/machine.go` | MachineSpecification struct & filtering |
 | `cloudprovider/client.go` | Cloud provider interface (`Client`) |

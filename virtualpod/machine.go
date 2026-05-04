@@ -75,8 +75,8 @@ type MachineSpecification struct {
 	DownloadSpeed    *float64 // Mbps
 	DownloadSpeedMin *float64
 	DownloadSpeedMax *float64
-	ContainerDiskInGB *int
-	DiskBW            *float64 // MB/s
+	DiskSpaceInGB    *float64
+	DiskBW           *float64 // MB/s
 
 	// Provider-specific
 	RunPod RunPodSpec

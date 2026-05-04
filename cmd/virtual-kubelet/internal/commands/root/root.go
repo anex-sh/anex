@@ -24,6 +24,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anex-sh/anex/cmd/virtual-kubelet/internal/provider"
+	"github.com/anex-sh/anex/internal/manager"
+	"github.com/anex-sh/anex/internal/provider/anex"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/virtual-kubelet/virtual-kubelet/errdefs"
@@ -31,9 +34,6 @@ import (
 	"github.com/virtual-kubelet/virtual-kubelet/node"
 	"github.com/virtual-kubelet/virtual-kubelet/node/api"
 	"github.com/virtual-kubelet/virtual-kubelet/node/nodeutil"
-	"gitlab.devklarka.cz/ai/gpu-provider/cmd/virtual-kubelet/internal/provider"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/manager"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/provider/glami"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiserver/pkg/server/dynamiccertificates"
 )
@@ -60,7 +60,7 @@ func runRootCommand(ctx context.Context, s *provider.Store, c Opts) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	config, err := glami.LoadConfig(c.ProviderConfigPath)
+	config, err := anex.LoadConfig(c.ProviderConfigPath)
 	if err != nil {
 		return err
 	}

@@ -1,11 +1,11 @@
-package glami
+package anex
 
 import (
 	"context"
 	"path"
 	"strings"
 
-	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
+	"github.com/anex-sh/anex/virtualpod"
 	"k8s.io/api/core/v1"
 	v2 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

@@ -3,7 +3,7 @@ GPU Provider — Architecture
 Components and responsibilities
 - Virtual Kubelet provider (VK)
   - Entrypoint: cmd/virtual-kubelet/main.go (sets logrus JSON, cobra root, registers provider)
-  - Provider impl: internal/provider/glami/provider.go (Pod CRUD against external cloud; annotates pods with gpu-provider.glami.cz/proxy-slot-id; status updates; lifecycle reconcile)
+  - Provider impl: internal/provider/anex/provider.go (Pod CRUD against external cloud; annotates pods with anex.sh/proxy-slot-id; status updates; lifecycle reconcile)
   - Cloud provider client(s): cloudprovider/vastai/* (VastAI API), cloudprovider/mock/* (mock)
   - Virtual pod abstraction: virtualpod/virtualpod.go (agent HTTP status polling, restart logic, container state transitions)
 
@@ -21,21 +21,21 @@ Components and responsibilities
 
 - API and CRD
   - Types: api/v1alpha1/virtualservice_types.go (spec/service/gateway, status/allocatedPorts/conditions, constants)
-  - CRD: deploy/chart/crds/gpu-provider.glami-ml.com_virtualservices.yaml
+  - CRD: deploy/chart/crds/anex.sh_virtualservices.yaml
 
 Key flows
 
 1) Virtual Pod lifecycle (VK provider)
 - CreatePod:
-  - Rejects multi-container pods; reserves a gateway slot and annotates pod with gpu-provider.glami.cz/proxy-slot-id (internal/provider/glami/provider.go: CreatePod)
-  - Initializes Pod status to Pending and ContainerWaiting; sets up config maps; constructs a virtualpod.VirtualPod and starts async provisioning (initializeVirtualPod) (internal/provider/glami/provider.go)
+  - Rejects multi-container pods; reserves a gateway slot and annotates pod with anex.sh/proxy-slot-id (internal/provider/anex/provider.go: CreatePod)
+  - Initializes Pod status to Pending and ContainerWaiting; sets up config maps; constructs a virtualpod.VirtualPod and starts async provisioning (initializeVirtualPod) (internal/provider/anex/provider.go)
 - Agent integration:
   - virtualpod.GetAgentAddress derives http://10.254.254.(11+slot):agentPort (virtualpod/virtualpod.go)
   - virtualpod.PodStatusUpdate polls agent /status (internal/agent/server.go) via utils.MakeRequest, updates container state, manages restarts/backoff and Pod phase (virtualpod/virtualpod.go)
 - DeletePod:
-  - Terminates machine via cloudprovider, releases gateway slot, finalizes virtual pod, and updates status (internal/provider/glami/provider.go: DeletePod)
+  - Terminates machine via cloudprovider, releases gateway slot, finalizes virtual pod, and updates status (internal/provider/anex/provider.go: DeletePod)
 - Periodic reconcile:
-  - reconcilePodLifecycle ticker reads agent status with timeouts/backoff and emits Pod updates/metrics (internal/provider/glami/provider.go)
+  - reconcilePodLifecycle ticker reads agent status with timeouts/backoff and emits Pod updates/metrics (internal/provider/anex/provider.go)
 
 2) VirtualService reconciliation (Gateway)
 - Triggered by:
@@ -96,4 +96,4 @@ Hot spots / delicate areas
 - Concurrency and caches:
   - Controller caches virtualPods/virtualServices with mutexes; event handlers update caches and enqueue keys (internal/gateway/controller.go)
 - Single-container constraint:
-  - Provider only supports a single container per pod; multi-container pods should be rejected (internal/provider/glami/provider.go: CreatePod)
+  - Provider only supports a single container per pod; multi-container pods should be rejected (internal/provider/anex/provider.go: CreatePod)

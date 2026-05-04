@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anex-sh/anex/internal/utils"
+	"github.com/anex-sh/anex/virtualpod"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/utils"
-	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 )
@@ -24,19 +24,36 @@ type BansConfig struct {
 	Duration time.Duration
 }
 
+const (
+	DefaultAgentURL     = "https://glami-gpu-provider.glami-ml.com/container_agent_v0.4.2"
+	DefaultWireproxyURL = "https://glami-gpu-provider.glami-ml.com/wireproxy"
+	DefaultPromtailURL  = "https://glami-gpu-provider.glami-ml.com/promtail"
+)
+
+// URLConfig holds the CDN URLs for the agent/wireproxy/promtail binaries
+// downloaded by the on-start script. Empty fields fall back to the default
+// Anex CDN URLs with AuthToken appended as a query string.
+type URLConfig struct {
+	AgentURL     string
+	WireproxyURL string
+	PromtailURL  string
+	AuthToken    string
+}
+
 type Client struct {
 	baseURL     string
 	authHeader  http.Header
 	clusterUID  string
 	retryClient *retryablehttp.Client
 	nodeName    string
+	urls        URLConfig
 
 	machineBans map[string]time.Time
 	bansMu      sync.Mutex
 	bansConfig  BansConfig
 }
 
-func NewClient(baseURL string, apiKey string, clusterUID string, nodeName string, bansConfig BansConfig) *Client {
+func NewClient(baseURL string, apiKey string, clusterUID string, nodeName string, urls URLConfig, bansConfig BansConfig) *Client {
 	return &Client{
 		baseURL: baseURL,
 		authHeader: http.Header{
@@ -45,6 +62,7 @@ func NewClient(baseURL string, apiKey string, clusterUID string, nodeName string
 		clusterUID:  clusterUID,
 		retryClient: utils.NewDefaultRetryClient(),
 		nodeName:    nodeName,
+		urls:        urls,
 		machineBans: make(map[string]time.Time),
 		bansConfig:  bansConfig,
 	}
@@ -265,10 +283,9 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 	}
 	sort.Ints(ports)
 
-	// TODO: Do not hardcode URLs
-	agentURL := "https://glami-gpu-provider.glami-ml.com/container_agent_v0.4.2?token=cSrYDWSRTawnkIup"
-	wireproxyURL := "https://glami-gpu-provider.glami-ml.com/wireproxy?token=cSrYDWSRTawnkIup"
-	promtailURL := "https://glami-gpu-provider.glami-ml.com/promtail?token=cSrYDWSRTawnkIup"
+	agentURL := resolveCDNURL(c.urls.AgentURL, DefaultAgentURL, c.urls.AuthToken)
+	wireproxyURL := resolveCDNURL(c.urls.WireproxyURL, DefaultWireproxyURL, c.urls.AuthToken)
+	promtailURL := resolveCDNURL(c.urls.PromtailURL, DefaultPromtailURL, c.urls.AuthToken)
 
 	// Build argv from Pod spec:
 	// - If Command is provided, use it as argv[0..] and append Args
@@ -327,14 +344,14 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 		ProxyTunnels:   proxyTunnels,
 	}
 
-	var diskSize int
+	var diskSize float64
 	annotations := pod.GetAnnotations()
-	if diskSizeStr, ok := annotations["glami.cz/disk-space-gb"]; ok {
-		if parsedDiskSize, err := strconv.Atoi(diskSizeStr); err == nil {
+	if diskSizeStr, ok := annotations["anex.sh/disk-space-gb"]; ok {
+		if parsedDiskSize, err := strconv.ParseFloat(diskSizeStr, 64); err == nil {
 			diskSize = parsedDiskSize
 		}
 	} else {
-		diskSize = 30
+		diskSize = 100.0
 	}
 
 	image := pod.Spec.Containers[0].Image
@@ -346,7 +363,7 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 		"image":     image,
 		"onstart":   script,
 		"label":     c.buildMachineLabel(pod.UID),
-		"disk":      strconv.Itoa(diskSize),
+		"disk":      diskSize,
 		"runtype":   "ssh",
 		"env": map[string]string{
 			"-p 72000:72000/udp": "1",

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"text/template"
 
+	"github.com/anex-sh/anex/internal/agent"
+	"github.com/anex-sh/anex/virtualpod"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/agent"
-	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 )
@@ -44,11 +44,27 @@ func (c *Client) SupportsMachineBans() bool { return false }
 func (c *Client) BanMachine(_ string)       {}
 
 func (c *Client) SelectAndProvisionMachine(ctx context.Context, spec virtualpod.MachineSpecification, pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bool, recorder record.EventRecorder) (string, error) {
+	logger := log.G(ctx)
+
+	logger.Info("Mock: searching for available machines matching requirements")
+	recorder.Eventf(pod, v1.EventTypeNormal, "SearchingMachines", "Searching for available machines matching requirements")
+
 	offers, err := c.GetRentalCandidates(ctx, spec)
 	if err != nil {
+		recorder.Eventf(pod, v1.EventTypeWarning, "MachineSearchFailed", "Failed to search for available machines")
 		return "", err
 	}
-	var candidateIDs []string
+
+	if len(offers) == 0 {
+		logger.Warn("Mock: no machines matching requirements")
+		recorder.Eventf(pod, v1.EventTypeWarning, "NoMachinesAvailable", "No machines matching requirements found")
+		return "", fmt.Errorf("no candidates match spec")
+	}
+
+	logger.Infof("Mock: found %d candidate(s)", len(offers))
+	recorder.Eventf(pod, v1.EventTypeNormal, "MachinesFound", "Found %d machine(s) matching requirements", len(offers))
+
+	candidateIDs := make([]string, 0, len(offers))
 	for _, o := range offers {
 		candidateIDs = append(candidateIDs, o.OfferID)
 	}
@@ -82,14 +98,18 @@ func (c *Client) GetRentalCandidates(ctx context.Context, spec virtualpod.Machin
 	logger := log.G(ctx)
 	logger.Info("Mock: Fetching rental candidates")
 
-	nextID := strconv.Itoa(c.machineCounter + 1)
-
 	var offers []virtualpod.Offer
-	offers = append(offers, virtualpod.Offer{
-		OfferID:   nextID,
-		MachineID: nextID,
-	})
+	for _, entry := range inventory {
+		if !matchesSpec(entry, spec) {
+			continue
+		}
+		offers = append(offers, virtualpod.Offer{
+			OfferID:   strconv.Itoa(entry.ID),
+			MachineID: strconv.Itoa(entry.MachineID),
+		})
+	}
 
+	logger.Infof("Mock: %d offer(s) match spec (of %d in inventory)", len(offers), len(inventory))
 	return offers, nil
 }
 
@@ -102,13 +122,13 @@ DNS         = 10.254.254.1
 
 [Peer]
 PublicKey           = {{ .ProxyConfig.Server.PublicKey }}
-Endpoint            = {{ .ProxyConfig.Server.Endpoint }}
+Endpoint            = {{ .ProxyConfig.Server.Endpoint }}:{{ .ProxyConfig.Server.PortUDP }}
 AllowedIPs          = 0.0.0.0/0
 PersistentKeepalive = 25
 
 [TCPServerTunnel]
-ListenPort = {{ .AgentPublicPort }}
-Target = 127.0.0.1:{{ .AgentLocalPort }}
+ListenPort = {{ .ProxyConfig.Client.GatewayPortOffset }}
+Target = 127.0.0.1:8080
 `
 
 func (c *Client) generateWireproxyConfig(ctx context.Context, proxy virtualpod.PodProxyConfig, wireproxyPort, agentPublicPort, agentLocalPort string) (string, error) {
@@ -138,30 +158,43 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 	logger := log.G(ctx)
 	logger.Infof("Mock: Provision machine from %d candidates", len(candidatesID))
 
-	newMachineID := candidatesID[0]
+	if len(candidatesID) == 0 {
+		return "", fmt.Errorf("no instance candidates provided")
+	}
 
-	var wireproxyDir string
-	agentPublicPort := c.BasePortAgent + c.machineCounter
-	agentLocalPort := strconv.Itoa(32000 + c.machineCounter)
-	wireproxyPort := strconv.Itoa(c.BasePortWireproxy + c.machineCounter)
+	offerID := candidatesID[0]
+	offer := lookupOffer(offerID)
+	if offer == nil {
+		return "", fmt.Errorf("offer %s not found in inventory", offerID)
+	}
 
-	wireproxyDir = fmt.Sprintf("/tmp/gpu-provider/pod-%s", newMachineID)
-	err = os.MkdirAll(wireproxyDir, 0755)
-	if err != nil {
+	c.mu.Lock()
+	c.machineCounter++
+	slot := c.machineCounter
+	c.mu.Unlock()
+
+	instanceID := strconv.Itoa(slot)
+	stableMachineID := strconv.Itoa(offer.MachineID)
+
+	agentPublicPort := c.BasePortAgent + slot
+	agentLocalPort := strconv.Itoa(8080)
+	wireproxyPort := strconv.Itoa(c.BasePortWireproxy + slot)
+
+	wireproxyDir := fmt.Sprintf("/tmp/gpu-provider/pod-%s", instanceID)
+	if err := os.MkdirAll(wireproxyDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create directory: %v", err)
 	}
 
 	wpCfg, err := c.generateWireproxyConfig(ctx, proxy, wireproxyPort, strconv.Itoa(agentPublicPort), agentLocalPort)
 	if err != nil {
-		return "", fmt.Errorf("failed to genereate wireproxy config template: %v", err)
+		return "", fmt.Errorf("failed to generate wireproxy config template: %v", err)
 	}
 
-	err = os.WriteFile(wireproxyDir+"/wireproxy.tpl", []byte(wpCfg), 0644)
-	if err != nil {
-		return "", fmt.Errorf("failed to write hello file: %v", err)
+	if err := os.WriteFile(wireproxyDir+"/wireproxy.tpl", []byte(wpCfg), 0644); err != nil {
+		return "", fmt.Errorf("failed to write wireproxy template: %v", err)
 	}
 
-	a := agent.NewAgent(32000+c.machineCounter, "sleep 36000", wireproxyDir)
+	a := agent.NewAgent(8080, "sleep 36000", wireproxyDir)
 	a.EnablePromtail = false
 	a.EnableProxy = true
 
@@ -170,21 +203,26 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 		logger.Infof(result)
 	}(ctx)
 
-	// Store the machine
 	machine := &virtualpod.Machine{
-		ID:        newMachineID,
-		MachineID: newMachineID,
+		ID:        instanceID,
+		MachineID: stableMachineID,
 		PublicIP:  "127.0.0.1",
 		AgentPort: agentPublicPort,
 		State:     virtualpod.MachineStateRunning,
+		States: virtualpod.States{
+			GpuName:    offer.GPUName,
+			GpuVRAM:    float64(offer.GPURam),
+			CpuCores:   offer.CPUCores,
+			CpuRam:     float64(offer.CPURam),
+			PricePerHr: offer.DphTotal,
+		},
 	}
 
 	c.mu.Lock()
-	c.machines[newMachineID] = machine
-	c.machineCounter++
+	c.machines[instanceID] = machine
 	c.mu.Unlock()
 
-	return newMachineID, nil
+	return instanceID, nil
 }
 
 type GenericApiResponse struct {

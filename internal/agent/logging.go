@@ -21,10 +21,6 @@ const (
 	// User and group ID for file ownership
 	UserID  = 0
 	GroupID = 0
-
-	// DefaultLogDir = "/home/skarupa/glami/vastai-container-agent"
-	// UserID  = 1000
-	// GroupID = 1000
 )
 
 // setFileOwnership changes the ownership of a file or directory to the specified user and group

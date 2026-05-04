@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/anex-sh/anex/cmd/virtual-kubelet/internal/provider"
 	"github.com/spf13/cobra"
-	"gitlab.devklarka.cz/ai/gpu-provider/cmd/virtual-kubelet/internal/provider"
 )
 
 // NewCommand creates a new providers subcommand

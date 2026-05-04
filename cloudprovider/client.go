@@ -3,7 +3,7 @@ package cloudprovider
 import (
 	"context"
 
-	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
+	"github.com/anex-sh/anex/virtualpod"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 )

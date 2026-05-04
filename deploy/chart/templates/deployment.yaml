@@ -192,10 +192,10 @@ spec:
           secret:
             secretName: "{{ include "chart.fullname" . }}-tls"
         {{- end }}
-        {{- if .Values.appConfig.gateway.config }}
+        {{- if .Values.deployment.gateway.config.secretName }}
         - name: gateway-config
           secret:
-            secretName: "{{ include "chart.fullname" . }}-gateway-config"
+            secretName: {{ .Values.deployment.gateway.config.secretName }}
         {{- else }}
         - name: gateway-config
           emptyDir:

@@ -1,4 +1,4 @@
-.PHONY: all build build-virtual-kubelet build-gateway-init build-gateway-controller build-container-agent clean docker-build docker-push test test-gateway test-one setup-envtest install-controller-gen
+.PHONY: all build build-virtual-kubelet build-gateway-init build-gateway-controller build-container-agent clean docker-build docker-build-kubelet docker-build-gateway docker-push docker-push-kubelet docker-push-gateway docker-all kind-start kind-stop test test-gateway test-one test-integration setup-envtest install-controller-gen
 
 # Version can be overridden
 VERSION ?= latest
@@ -70,6 +70,15 @@ test-one: setup-envtest
 	KUBEBUILDER_ASSETS=$(ENVTEST_ASSETS_DIR) \
 		go test -v -timeout 120s ./internal/gateway/... -run "^$(TEST)$$"
 
+# Integration test: spins up kind cluster, loads images, installs chart, checks containers.
+# Requires: kind, helm, kubectl, docker; plus locally-built virtual-kubelet:latest and gateway:latest.
+# Build images with:
+#   docker build -f deploy/Dockerfile         -t virtual-kubelet:latest .
+#   docker build -f deploy/gateway.Dockerfile -t gateway:latest         .
+# Set KEEP_CLUSTER=1 to leave the cluster on failure for debugging.
+test-integration:
+	go test -tags integration -v -timeout 20m ./test/integration/...
+
 # Envtest assets directory
 ENVTEST_ASSETS_DIR ?= $(shell pwd)/.envtest
 
@@ -126,21 +135,47 @@ setup-envtest:
 		echo "Envtest binaries already present in $(ENVTEST_ASSETS_DIR)"; \
 	fi
 
-# Build Docker Virtual Kubelet image
+# Build local virtual-kubelet Docker image
 docker-build-kubelet: build-virtual-kubelet
-	@echo "Building Docker images..."
-	docker build -f deploy/Dockerfile -t public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet:$(VERSION) .
+	@echo "Building virtual-kubelet Docker image..."
+	docker build -f deploy/Dockerfile -t virtual-kubelet:latest .
+
+# Build local gateway Docker image
+docker-build-gateway: build-gateway-init build-gateway-controller
+	@echo "Building gateway Docker image..."
+	docker build -f deploy/gateway.Dockerfile -t gateway:latest .
+
+# Build all local Docker images
+docker-build: docker-build-kubelet docker-build-gateway
+
+# Tag and push virtual-kubelet image to ECR
+docker-push-kubelet: docker-build-kubelet
+	@echo "Pushing virtual-kubelet image as $(VERSION)..."
+	docker tag virtual-kubelet:latest public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet:$(VERSION)
 	docker push public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet:$(VERSION)
 
-
-# Build Docker Virtual Kubelet image
-docker-build-gateway: build-gateway-init build-gateway-controller
-	@echo "Building Docker images..."
-	docker build -f deploy/gateway.Dockerfile -t public.ecr.aws/m4v1f8q5/gpu-provider/gateway:$(VERSION) .
+# Tag and push gateway image to ECR
+docker-push-gateway: docker-build-gateway
+	@echo "Pushing gateway image as $(VERSION)..."
+	docker tag gateway:latest public.ecr.aws/m4v1f8q5/gpu-provider/gateway:$(VERSION)
 	docker push public.ecr.aws/m4v1f8q5/gpu-provider/gateway:$(VERSION)
 
-# Build all Docker images
-docker-build: docker-build-kubelet docker-build-gateway
+# Push all Docker images to ECR
+docker-push: docker-push-kubelet docker-push-gateway
+
+# Full Docker pipeline: build and push all images
+docker-all: docker-push
+
+# Create local kind cluster and load images
+kind-start:
+	kind create cluster --name local --config test/kind-config.yaml
+	kubectl cluster-info --context kind-local
+	kind load docker-image virtual-kubelet:latest --name local
+	kind load docker-image gateway:latest --name local
+
+# Delete local kind cluster
+kind-stop:
+	kind delete cluster --name local
 
 helm-release:
 	@echo "Packaging and pushing Helm chart..."
@@ -170,7 +205,15 @@ help:
 	@echo "  test-gateway           - Run gateway controller integration tests"
 	@echo "  test-one TEST=<name>   - Run a specific test (e.g., make test-one TEST=TestVirtualServiceBasicLifecycle)"
 	@echo "  setup-envtest          - Download envtest binaries (kube-apiserver, etcd)"
-	@echo "  docker-build           - Build Docker images"
+	@echo "  docker-build           - Build all local Docker images"
+	@echo "  docker-build-kubelet   - Build local virtual-kubelet:latest image"
+	@echo "  docker-build-gateway   - Build local gateway:latest image"
+	@echo "  docker-push            - Tag and push all images to ECR"
+	@echo "  docker-push-kubelet    - Tag and push virtual-kubelet image to ECR"
+	@echo "  docker-push-gateway    - Tag and push gateway image to ECR"
+	@echo "  docker-all             - Build and push all Docker images"
+	@echo "  kind-start             - Start local Kind cluster and load ANEX images"
+	@echo "  kind-stop              - Stop and delete local Kind cluster"
 	@echo "  helm-release           - Pack Helm and push it to registry"
 	@echo "  install-controller-gen - Install controller-gen tool"
 	@echo "  help                   - Show this help message"

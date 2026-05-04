@@ -477,7 +477,7 @@ func (a *Agent) handleSigtermSignal() {
 }
 
 func (a *Agent) Run() (string, error) {
-	slog.Debug("Running agent", "port", a.Port)
+	slog.Info("Running agent", "port", a.Port)
 
 	// Do not start the child process automatically. Only run HTTP server and Wireproxy.
 	slog.Info("Starting Wireproxy client")

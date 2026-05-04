@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/anex-sh/anex/internal/agent"
 	"github.com/spf13/cobra"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/agent"
 )
 
 var (
@@ -66,7 +66,7 @@ func main() {
 	runCmd := &cobra.Command{
 		Use:   "run [flags] -- <command> [args...]",
 		Short: "Run the container agent",
-		Long:  `Run the container agent to simulate pod runtime behavior. 
+		Long: `Run the container agent to simulate pod runtime behavior. 
 Pass the container command after -- to avoid flag parsing issues, e.g.:
   /container_agent run -p 8080 -- /bin/bash -c 'echo hello && sleep 1'`,
 		Run: func(cmd *cobra.Command, args []string) {

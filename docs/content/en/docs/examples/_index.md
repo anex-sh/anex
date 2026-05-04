@@ -23,7 +23,7 @@ Coming soon:
 
 
 ```yaml
-apiVersion: gpu-provider.glami-ml.com/v1alpha1
+apiVersion: anex.sh/v1alpha1
 kind: VirtualService
 metadata:
   name: fancy-page
@@ -54,10 +54,10 @@ spec:
       labels:
         app: nginx
       annotations:
-        gpu-provider.glami.cz/region: "europe"
-        gpu-provider.glami.cz/gpu-names: "RTX 4090"
-        gpu-provider.glami.cz/price-max: "0.3"
-        gpu-provider.glami.cz/verified-only: "true"
+        anex.sh/region: "europe"
+        anex.sh/gpu-names: "RTX 4090"
+        anex.sh/price-max: "0.3"
+        anex.sh/verified-only: "true"
         # mark the pod as virtual to be a valid Virtual Service target
         virtual: "true"
     spec:

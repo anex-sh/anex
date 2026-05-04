@@ -1,6 +1,6 @@
 package vastai
 
-import "gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
+import "github.com/anex-sh/anex/virtualpod"
 
 var RegionToCountryMapping = map[string][]string{
 	"europe": {

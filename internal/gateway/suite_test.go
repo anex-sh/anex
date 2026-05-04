@@ -1,19 +1,3 @@
-/*
-Copyright 2026 GLAMI ML.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package gateway
 
 import (
@@ -38,16 +22,16 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	gpuv1alpha1 "gitlab.devklarka.cz/ai/gpu-provider/api/v1alpha1"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/gateway/haproxy"
+	gpuv1alpha1 "github.com/anex-sh/anex/api/v1alpha1"
+	"github.com/anex-sh/anex/internal/gateway/haproxy"
 )
 
 const (
-	testNamespace        = "test-ns"
-	gatewayPodName       = "test-gateway"
-	gatewayPodNamespace  = "gateway-ns"
-	defaultTimeout       = 10 * time.Second
-	pollInterval         = 100 * time.Millisecond
+	testNamespace       = "test-ns"
+	gatewayPodName      = "test-gateway"
+	gatewayPodNamespace = "gateway-ns"
+	defaultTimeout      = 10 * time.Second
+	pollInterval        = 100 * time.Millisecond
 )
 
 const gatewayTestIP = "10.100.0.1"
@@ -166,7 +150,7 @@ func setupTestEnv(t *testing.T) *testEnv {
 
 	// Create dynamic informer for VirtualService
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -252,7 +236,7 @@ func (te *testEnv) createVirtualService(t *testing.T, name, namespace string, po
 
 	vs := &gpuv1alpha1.VirtualService{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gpu-provider.glami-ml.com/v1alpha1",
+			APIVersion: "anex.sh/v1alpha1",
 			Kind:       "VirtualService",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -277,7 +261,7 @@ func (te *testEnv) createVirtualService(t *testing.T, name, namespace string, po
 	}
 
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -306,7 +290,7 @@ func (te *testEnv) getVirtualService(t *testing.T, name, namespace string) *gpuv
 	t.Helper()
 
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -329,7 +313,7 @@ func (te *testEnv) deleteVirtualService(t *testing.T, name, namespace string) {
 	t.Helper()
 
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -381,7 +365,7 @@ func (te *testEnv) waitForVirtualServiceDeleted(t *testing.T, name, namespace st
 	t.Helper()
 
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -450,7 +434,7 @@ func (te *testEnv) updateVirtualService(t *testing.T, name, namespace string, po
 	t.Helper()
 
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -501,7 +485,7 @@ func (te *testEnv) addAnnotationToVirtualService(t *testing.T, name, namespace, 
 	t.Helper()
 
 	gvr := schema.GroupVersionResource{
-		Group:    "gpu-provider.glami-ml.com",
+		Group:    "anex.sh",
 		Version:  "v1alpha1",
 		Resource: "virtualservices",
 	}
@@ -550,8 +534,8 @@ func (te *testEnv) createVirtualPod(t *testing.T, name, namespace string, labels
 			Namespace: namespace,
 			Labels:    labels,
 			Annotations: map[string]string{
-				"virtual":                          "true",
-				"gpu-provider.glami.cz/proxy-slot-id": fmt.Sprintf("%d", proxySlotID),
+				"virtual":                             "true",
+				"anex.sh/proxy-slot-id": fmt.Sprintf("%d", proxySlotID),
 			},
 		},
 		Spec: corev1.PodSpec{

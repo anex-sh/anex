@@ -1,4 +1,4 @@
-package glami
+package anex
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
+	"github.com/anex-sh/anex/virtualpod"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -54,6 +54,14 @@ type CloudProviderConfig struct {
 	Active string       `yaml:"active"`
 	VastAI VastAIConfig `yaml:"vastAI"`
 	RunPod RunPodConfig `yaml:"runPod"`
+}
+
+// CDNConfig holds binary CDN URLs and auth token for vast.ai provisioning.
+type CDNConfig struct {
+	AgentURL      string `yaml:"agentURL"`
+	WireproxyURL  string `yaml:"wireproxyURL"`
+	PromtailURL   string `yaml:"promtailURL"`
+	AnexAuthToken string `yaml:"anexAuthToken"`
 }
 
 // MachineBansStoreLocalFileConfig holds local file configuration for machine bans
@@ -130,6 +138,7 @@ type ProviderConfig struct {
 	LogLevel       string              `yaml:"logLevel,omitempty"`
 	Cluster        ClusterConfig       `yaml:"cluster"`
 	CloudProvider  CloudProviderConfig `yaml:"cloudProvider"`
+	CDN            CDNConfig           `yaml:"cdn"`
 	Provisioning   ProvisioningConfig  `yaml:"provisioning"`
 	VirtualNode    VirtualNodeConfig   `yaml:"virtualNode"`
 	Gateway        GatewayConfig       `yaml:"gateway"`
@@ -203,6 +212,20 @@ func (c *ProviderConfig) overrideWithEnv() {
 	}
 	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "promtailURL")); val != "" {
 		c.CloudProvider.RunPod.PromtailURL = val
+	}
+
+	// CDN
+	if val := os.Getenv(getEnvWithPrefix("cdn", "agentURL")); val != "" {
+		c.CDN.AgentURL = val
+	}
+	if val := os.Getenv(getEnvWithPrefix("cdn", "wireproxyURL")); val != "" {
+		c.CDN.WireproxyURL = val
+	}
+	if val := os.Getenv(getEnvWithPrefix("cdn", "promtailURL")); val != "" {
+		c.CDN.PromtailURL = val
+	}
+	if val := os.Getenv(getEnvWithPrefix("cdn", "anexAuthToken")); val != "" {
+		c.CDN.AnexAuthToken = val
 	}
 
 	// Provisioning
@@ -394,6 +417,16 @@ func LoadConfig(providerConfig string) (config ProviderConfig, err error) {
 		// ok
 	default:
 		return config, fmt.Errorf("cloudProvider.active must be one of: vastai, runpod, mock (got %q)", config.CloudProvider.Active)
+	}
+
+	// Validate CDN auth token when defaults are in use (vastai only).
+	if strings.ToLower(config.CloudProvider.Active) == "vastai" && config.CDN.AnexAuthToken == "" {
+		if config.CDN.AgentURL == "" || config.CDN.WireproxyURL == "" {
+			return config, fmt.Errorf("cdn.anexAuthToken is required when cdn.agentURL or cdn.wireproxyURL is unset (defaults to Anex CDN which requires authentication)")
+		}
+		if config.Promtail.Enable && config.CDN.PromtailURL == "" {
+			return config, fmt.Errorf("cdn.anexAuthToken is required when cdn.promtailURL is unset and promtail is enabled")
+		}
 	}
 
 	// Validate resource quantities

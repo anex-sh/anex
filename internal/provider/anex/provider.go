@@ -1,4 +1,4 @@
-package glami
+package anex
 
 import (
 	"context"
@@ -12,17 +12,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anex-sh/anex/cloudprovider"
+	"github.com/anex-sh/anex/cloudprovider/mock"
+	"github.com/anex-sh/anex/cloudprovider/runpod"
+	"github.com/anex-sh/anex/cloudprovider/vastai"
+	"github.com/anex-sh/anex/internal/utils"
+	"github.com/anex-sh/anex/virtualpod"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/errdefs"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"github.com/virtual-kubelet/virtual-kubelet/node/api"
 	"github.com/virtual-kubelet/virtual-kubelet/trace"
-	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider"
-	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider/mock"
-	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider/runpod"
-	"gitlab.devklarka.cz/ai/gpu-provider/cloudprovider/vastai"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/utils"
-	"gitlab.devklarka.cz/ai/gpu-provider/virtualpod"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -130,7 +130,19 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 			FilePath: config.Provisioning.MachineBansStore.LocalFile.Path,
 			Duration: banDuration,
 		}
-		provider.client = vastai.NewClient("https://console.vast.ai/api/v0", config.CloudProvider.VastAI.APIKey, clusterUUID, config.VirtualNode.NodeName, bansConfig)
+		provider.client = vastai.NewClient(
+			"https://console.vast.ai/api/v0",
+			config.CloudProvider.VastAI.APIKey,
+			clusterUUID,
+			config.VirtualNode.NodeName,
+			vastai.URLConfig{
+				AgentURL:     config.CDN.AgentURL,
+				WireproxyURL: config.CDN.WireproxyURL,
+				PromtailURL:  config.CDN.PromtailURL,
+				AuthToken:    config.CDN.AnexAuthToken,
+			},
+			bansConfig,
+		)
 	default:
 		return nil, fmt.Errorf("unknown cloud provider: %s", config.CloudProvider.Active)
 	}
@@ -195,7 +207,7 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 		}
 
 		key := buildKey(&pod)
-		proxySlotIndex, _ := strconv.Atoi(pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"])
+		proxySlotIndex, _ := strconv.Atoi(pod.Annotations["anex.sh/proxy-slot-id"])
 		if provider.clientProxySettings[proxySlotIndex].Assigned {
 			log.G(ctx).Errorf("proxy slot %d already assigned, skipping pod %s", proxySlotIndex, key)
 			continue
@@ -339,7 +351,7 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	p.eventRecorder.Event(pod, v1.EventTypeNormal, "Creating", "Creating pod")
 
 	if len(pod.Spec.Containers) > 1 {
-		return fmt.Errorf("Glami Provider does not support multiple containers")
+		return fmt.Errorf("ANEX does not support multiple containers")
 	}
 
 	var err error
@@ -353,7 +365,7 @@ func (p *Provider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	if err != nil {
 		return err
 	}
-	pod.Annotations["gpu-provider.glami.cz/proxy-slot-id"] = strconv.Itoa(gatewaySlotId)
+	pod.Annotations["anex.sh/proxy-slot-id"] = strconv.Itoa(gatewaySlotId)
 
 	now := metav1.NewTime(time.Now())
 	pod.Status = v1.PodStatus{

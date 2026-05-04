@@ -18,13 +18,18 @@ deployment:
     domain: ""
     nodePortUDP: 31000
     nodePortTCP: 31001
+    config:
+      # Name of a pre-existing Secret in the release namespace holding the
+      # gateway wireguard config under key "config.yaml". If empty,
+      # gateway-init generates fresh keys into an emptyDir on pod start.
+      secretName: ""
 
   containers:
     virtualKubelet:
       enabled: true
       image:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet"
-        tag: "v0.4.5"
+        tag: "v0.4.6"
         pullPolicy: Always
 
       resources: {}
@@ -38,7 +43,7 @@ deployment:
     gateway:
       image:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/gateway"
-        tag: "v0.4.5"
+        tag: "v0.4.6"
         pullPolicy: Always
 
       # TODO: Remove requirements
@@ -66,6 +71,12 @@ appConfig:
 
   cluster:
     clusterUUID: ""
+
+  cdn:
+    agentURL: ""
+    wireproxyURL: ""
+    promtailURL: ""
+    anexAuthToken: ""
 
   cloudProvider:
     vastAI:

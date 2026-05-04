@@ -70,11 +70,11 @@ metadata:
   labels:
     app: llama
   annotations:
-    gpu-provider.glami.cz/region: "europe"
-    gpu-provider.glami.cz/gpu-names: "RTX 4090,RTX 3090"
-    gpu-provider.glami.cz/price-max: "0.5"
-    gpu-provider.glami.cz/verified-only: "true"
-    gpu-provider.glami.cz/disk-space-gb: "100"
+    anex.sh/region: "europe"
+    anex.sh/gpu-names: "RTX 4090,RTX 3090"
+    anex.sh/price-max: "0.5"
+    anex.sh/verified-only: "true"
+    anex.sh/disk-space-gb: "100"
     virtual: "true"
 spec:
   containers:
@@ -300,11 +300,11 @@ Annotations on the pod tell Anex what kind of GPU machine to rent:
 
 ```yaml
 annotations:
-  gpu-provider.glami.cz/region: "europe"              # Preferred region
-  gpu-provider.glami.cz/gpu-names: "RTX 4090,RTX 3090"  # Acceptable GPU types (comma-separated)
-  gpu-provider.glami.cz/price-max: "0.5"             # Maximum price per hour in USD
-  gpu-provider.glami.cz/verified-only: "true"        # Only use verified/trusted hosts
-  gpu-provider.glami.cz/disk-space-gb: "100"         # Disk space to request (in GB)
+  anex.sh/region: "europe"              # Preferred region
+  anex.sh/gpu-names: "RTX 4090,RTX 3090"  # Acceptable GPU types (comma-separated)
+  anex.sh/price-max: "0.5"             # Maximum price per hour in USD
+  anex.sh/verified-only: "true"        # Only use verified/trusted hosts
+  anex.sh/disk-space-gb: "100"         # Disk space to request (in GB)
   virtual: "true"                       # Required — marks this pod as a virtual pod
 ```
 
@@ -331,7 +331,7 @@ tolerations:
 Standard Kubernetes Services cannot route traffic to virtual pods because they run on remote machines outside the cluster network. Anex provides a custom resource called **VirtualService** that handles this. It creates a Service with the same name and port, but routes traffic through the Anex gateway to reach the remote pod.
 
 ```yaml
-apiVersion: gpu-provider.glami-ml.com/v1alpha1
+apiVersion: anex.sh/v1alpha1
 kind: VirtualService
 metadata:
   name: my-service
@@ -391,11 +391,11 @@ metadata:
   labels:
     app: llama
   annotations:
-    gpu-provider.glami.cz/region: "europe"
-    gpu-provider.glami.cz/gpu-names: "RTX 4090,RTX 3090"
-    gpu-provider.glami.cz/price-max: "0.5"
-    gpu-provider.glami.cz/verified-only: "true"
-    gpu-provider.glami.cz/disk-space-gb: "100"
+    anex.sh/region: "europe"
+    anex.sh/gpu-names: "RTX 4090,RTX 3090"
+    anex.sh/price-max: "0.5"
+    anex.sh/verified-only: "true"
+    anex.sh/disk-space-gb: "100"
     virtual: "true"
 spec:
   containers:
@@ -495,7 +495,7 @@ The setup consists of four Kubernetes resources:
 **llama-ingress.yaml:**
 ```yaml
 # 1. VirtualService: makes the remote llama pod reachable inside the cluster
-apiVersion: gpu-provider.glami-ml.com/v1alpha1
+apiVersion: anex.sh/v1alpha1
 kind: VirtualService
 metadata:
   name: llama
@@ -554,11 +554,11 @@ metadata:
   labels:
     app: llama
   annotations:
-    gpu-provider.glami.cz/region: "europe"
-    gpu-provider.glami.cz/gpu-names: "RTX 4090,RTX 3090"
-    gpu-provider.glami.cz/price-max: "0.5"
-    gpu-provider.glami.cz/verified-only: "true"
-    gpu-provider.glami.cz/disk-space-gb: "100"
+    anex.sh/region: "europe"
+    anex.sh/gpu-names: "RTX 4090,RTX 3090"
+    anex.sh/price-max: "0.5"
+    anex.sh/verified-only: "true"
+    anex.sh/disk-space-gb: "100"
     virtual: "true"
 spec:
   containers:

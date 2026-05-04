@@ -9,9 +9,9 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/anex-sh/anex/internal/utils"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
-	"gitlab.devklarka.cz/ai/gpu-provider/internal/utils"
 )
 
 type GenericResponse struct {

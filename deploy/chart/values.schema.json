@@ -15,6 +15,15 @@
             "domain": {
               "type": "string",
               "description": "Required when gateway.class is node-port"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "secretName": {
+                  "type": "string",
+                  "description": "Name of a pre-existing Secret holding the gateway wireguard config under key \"config.yaml\". Empty = generate fresh keys in emptyDir."
+                }
+              }
             }
           },
           "required": ["class"],

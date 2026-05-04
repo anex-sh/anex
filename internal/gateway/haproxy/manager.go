@@ -1,19 +1,3 @@
-/*
-Copyright 2026 GLAMI ML.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package haproxy
 
 import (
@@ -54,7 +38,7 @@ type Manager struct {
 	listeners  map[string][]ListenerConfig // owner key -> listener configs
 }
 
- // authRoundTripper adds Basic Auth to every request when username is set
+// authRoundTripper adds Basic Auth to every request when username is set
 type authRoundTripper struct {
 	base     http.RoundTripper
 	username string
@@ -251,7 +235,7 @@ func (m *Manager) removeConfiguration(ownerKey string, configs []ListenerConfig)
 	return nil
 }
 
- // Transaction management
+// Transaction management
 
 func (m *Manager) getConfigVersion() (int, error) {
 	url := fmt.Sprintf("%s/services/haproxy/configuration/version", m.apiURL)
@@ -364,7 +348,7 @@ func (m *Manager) deleteTransaction(txID string) error {
 	return nil
 }
 
- // Reload management
+// Reload management
 
 func (m *Manager) triggerReload(force bool) error {
 	url := fmt.Sprintf("%s/services/haproxy/reloads", m.apiURL)
@@ -400,12 +384,12 @@ func (m *Manager) ensureFrontend(txID, name string, port int, backendName string
 	if frontendExists {
 		// Frontend exists, verify and update bind if needed
 		klog.V(4).Infof("Frontend %s already exists, checking bind configuration", name)
-		
+
 		// Check the bind configuration
 		if err := m.ensureBind(txID, name, port); err != nil {
 			return fmt.Errorf("failed to ensure bind for existing frontend: %w", err)
 		}
-		
+
 		// Update default backend if needed
 		frontend := map[string]interface{}{
 			"name":            name,
@@ -523,7 +507,7 @@ func (m *Manager) ensureBind(txID, frontendName string, port int) error {
 
 		// Port is wrong, update it
 		klog.V(4).Infof("Updating bind port for frontend %s from %d to %d", frontendName, currentPort, port)
-		
+
 		bind := map[string]interface{}{
 			"name":    "bind_1",
 			"address": "*",
