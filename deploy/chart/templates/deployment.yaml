@@ -110,7 +110,7 @@ spec:
 
         # Gateway
         - name: gateway
-          image: {{ .Values.deployment.containers.gateway.image.repository }}:{{ .Values.deployment.containers.gateway.image.tag | default .Chart.AppVersion }}
+          image: {{ .Values.deployment.containers.gateway.image.repository }}:{{ .Values.deployment.containers.gateway.image.tag | default .Chart.Version }}
           imagePullPolicy: {{ .Values.deployment.containers.gateway.image.pullPolicy }}
           env:
             - name: GATEWAY_CONFIG_PATH
@@ -156,7 +156,7 @@ spec:
 
         # Gateway Controller
         - name: gateway-controller
-          image: {{ .Values.deployment.containers.gateway.image.repository }}:{{ .Values.deployment.containers.gateway.image.tag | default .Chart.AppVersion }}
+          image: {{ .Values.deployment.containers.gateway.image.repository }}:{{ .Values.deployment.containers.gateway.image.tag | default .Chart.Version }}
           imagePullPolicy: {{ .Values.deployment.containers.gateway.image.pullPolicy }}
           command: ["/gateway-controller"]
           args:
