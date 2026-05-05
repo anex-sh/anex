@@ -3,77 +3,75 @@ title: "Running GPU Workloads"
 linkTitle: "Running GPU Workloads"
 weight: 4
 description: >
-  Guide to deploying workload on a virtual nodes
+  Deploying workloads on the Anex virtual node
 ---
 
 ## Networking
 
-Since VastAI does not allow us to run Wireguard in kernel space the VPN is done by Wireproxy in user space. This means all traffic to the cluster needs to go either over HTTP proxy or through tunnel.
+Vast.AI does not allow Wireguard in kernel space, so the VPN runs in user space via Wireproxy. RunPod blocks UDP entirely, so Wireguard is tunneled over WebSocket (wstunnel). In both cases, traffic from the remote container reaches the cluster either through an HTTP proxy or via TCP tunnels.
 
-Proxy is available at `localhost:3128`
-
-TCP Tunnels can be set by setting ENV variables in format `GW_TUNNEL_<port-number>` = `private address to tunnel to`. Set these variables in pod's definition.
-
-
+- **HTTP proxy** is available inside the container at `localhost:3128`.
+- **TCP tunnels** are configured via env vars on the pod: `GW_TUNNEL_<port>` = `<destination address>`. Anex pushes those into the agent and wireproxy reroutes the local port to the destination over the VPN.
 
 ## Machine Selection
 
-You can control machine selection by adding annotations to your Pod specification. All annotations use the prefix `anex.sh/`.
-
-#### Machine Quality
-
-|  | |      |                                                 |
-|------------|------------------------|------|-------------------------------------------------|
-| `verified-only` | Only select verified machines                          | `bool` | `anex.sh/verified-only: "true"`   |
-| `datacenter-only` | Only select datacenter machines (no consumer hardware) | `bool` | `anex.sh/datacenter-only: "true"` |
+Annotations on the pod control machine selection. Shared filters use the `anex.sh/` prefix; provider-specific filters use `vastai.anex.sh/` and `runpod.anex.sh/`.
 
 #### Allowed Regions
 
-|  |  | |  |
-|------------|-------------|-------|---------|
-| `region` | Specify allowed regions (comma-separated) | `europe`, `north-america`, `asia-pacific`, `africa`, `south-america`, `oceania` | `anex.sh/region: "europe,north-america"` |
+| Annotation | Description | Allowed values |
+|---|---|---|
+| `anex.sh/region` | Comma-separated list of allowed regions | `europe`, `north-america`, `asia-pacific`, `africa`, `south-america`, `oceania` |
 
-#### GPU Names and SM
+#### GPU Identification
 
-|  |  |  |
-|------------|-------------|---------|
-| `gpu-names` | Comma-separated list of allowed GPU names | `anex.sh/gpu-names: "RTX 4090,RTX 3090"` |
-| `compute-cap` | Comma-separated list of allowed CUDA compute capabilities | `anex.sh/compute-cap: "8.6,8.9"` |
+| Annotation | Description | Example |
+|---|---|---|
+| `anex.sh/gpu-names` | Comma-separated list of allowed GPU names | `anex.sh/gpu-names: "RTX 4090,RTX 3090"` |
+| `anex.sh/compute-cap` | Comma-separated list of allowed CUDA compute capabilities | `anex.sh/compute-cap: "8.6,8.9"` |
 
-#### GPU Filters
+#### Numeric Filters
 
 All numeric filters support three variants:
-- Exact value: `<field-name>`
-- Minimum value: `<field-name>-min`
-- Maximum value: `<field-name>-max`
+- Exact value: `<field>`
+- Minimum: `<field>-min`
+- Maximum: `<field>-max`
 
-**Note:** If an exact value is specified, min/max values for that field are ignored.
+If an exact value is set, the corresponding `-min`/`-max` are ignored.
 
-|  |  |  |  |
-|------------|-------------|------|---------|
-| `gpu-count` | Number of GPUs | count | `anex.sh/gpu-count: "2"` |
-| `vram` | VRAM per GPU | MB | `anex.sh/vram: "24576"` |
-| `vram-total` | Total VRAM across all GPUs | MB | `anex.sh/vram-total: "49152"` |
-| `vram-bandwidth` | GPU memory bandwidth | GB/s | `anex.sh/vram-bandwidth: "900.0"` |
-| `tflops` | Total TFLOPS | TFLOPS | `anex.sh/tflops: "82.0"` |
-| `cuda` | CUDA version | version | `anex.sh/cuda: "12.1"` |
-| `cpu` | Number of CPU cores | cores | `anex.sh/cpu: "8"` |
-| `ram` | System RAM | MB | `anex.sh/ram: "32768"` |
-| `price` | Exact price per hour | USD/hour | `anex.sh/price: "0.50"` |
-| `upload-speed` | Upload speed | Mbps | `anex.sh/upload-speed: "1000"` |
-| `download-speed` | Download speed | Mbps | `anex.sh/download-speed: "1000"` |
+| Annotation | Description | Unit |
+|---|---|---|
+| `anex.sh/gpu-count` | Number of GPUs | count |
+| `anex.sh/vram` | VRAM per GPU | MB |
+| `anex.sh/vram-total` | Total VRAM across all GPUs | MB |
+| `anex.sh/vram-bandwidth` | GPU memory bandwidth | GB/s |
+| `anex.sh/tflops` | Total TFLOPS | TFLOPS |
+| `anex.sh/cuda` | CUDA version | version |
+| `anex.sh/cpu` | Number of CPU cores | cores |
+| `anex.sh/ram` | System RAM | MB |
+| `anex.sh/price` | Price per hour (whole machine) | USD/hour |
+| `anex.sh/upload-speed` | Upload speed | Mbps |
+| `anex.sh/download-speed` | Download speed | Mbps |
+| `anex.sh/disk-space-gb` | Container disk to allocate | GB |
+| `anex.sh/disk-bw` | Disk bandwidth | MB/s |
 
-##### VastAI-Specific Filters
+#### Vast.AI-Specific
 
-|  |  |  |  |
-|------------|-------------|------|---------|
-| `vastai-dlperf` | VastAI DLPerf benchmark score | score | `anex.sh/vastai-dlperf: "100.0"` |
-| `vastai-dlperf-min` | Minimum DLPerf score | score | `anex.sh/vastai-dlperf-min: "50.0"` |
-| `vastai-dlperf-max` | Maximum DLPerf score | score | `anex.sh/vastai-dlperf-max: "150.0"` |
+| Annotation | Description | Type |
+|---|---|---|
+| `vastai.anex.sh/verified-only` | Only select Vast.AI-verified machines (default `true`) | bool |
+| `vastai.anex.sh/datacenter-only` | Only select datacenter machines (no consumer hardware) | bool |
+| `vastai.anex.sh/dlperf` | DLPerf benchmark score (also `-min` / `-max`) | float |
 
-### Example Pod Specification
+#### RunPod-Specific
 
-Here's a complete example showing how to use these annotations:
+| Annotation | Description | Values |
+|---|---|---|
+| `runpod.anex.sh/cloud-type` | RunPod cloud tier | `SECURE` or `COMMUNITY` |
+| `runpod.anex.sh/datacenter-ids` | Comma-separated, priority-ordered datacenter IDs | e.g. `EU-RO-1,US-CA-2` |
+| `runpod.anex.sh/keep-gpu-type-priority` | Preserve GPU type priority order during selection | bool |
+
+### Example Pod
 
 ```yaml
 apiVersion: v1
@@ -81,36 +79,47 @@ kind: Pod
 metadata:
   name: my-gpu-workload
   annotations:
-    # Only verified datacenter machines in Europe
-    anex.sh/verified-only: "true"
-    anex.sh/datacenter-only: "true"
+    # Region + GPU
     anex.sh/region: "europe"
-    
-    # GPU requirements: 2x RTX 4090 or RTX 3090
     anex.sh/gpu-names: "RTX 4090,RTX 3090"
     anex.sh/gpu-count: "2"
-    anex.sh/vram-min: "20480"  # At least 20GB per GPU
-    
-    # CPU and RAM requirements
+    anex.sh/vram-min: "20480"     # ≥ 20GB per GPU
+
+    # CPU and RAM
     anex.sh/cpu-min: "8"
-    anex.sh/ram-min: "32768"  # At least 32GB RAM
-    
-    # Price constraint
-    anex.sh/price-max: "1.50"  # Maximum $1.50 per hour
-    
-    # Network requirements
-    anex.sh/download-speed-min: "1000"  # At least 1Gbps
+    anex.sh/ram-min: "32768"      # ≥ 32GB RAM
+
+    # Price
+    anex.sh/price-max: "1.50"
+
+    # Network
+    anex.sh/download-speed-min: "1000"
+
+    # Vast.AI: only verified datacenter hardware
+    vastai.anex.sh/verified-only: "true"
+    vastai.anex.sh/datacenter-only: "true"
 spec:
   containers:
-  - name: training-container
-    image: pytorch/pytorch:latest
-    command: ["python", "train.py"]
+    - name: training
+      image: pytorch/pytorch:latest
+      command: ["python", "train.py"]
+  nodeSelector:
+    node-provider: vastai
+  tolerations:
+    - key: "virtual-kubelet.io/provider"
+      operator: "Equal"
+      value: "vastai"
+      effect: "NoSchedule"
+    - key: "ignore-taint.cluster-autoscaler.kubernetes.io/manual-ignore"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
 ```
 
-### Filter Behavior
+### Filter Behaviour
 
-- **Exact vs Range**: When you specify an exact value (e.g., `gpu-count: "2"`), the corresponding min/max filters are ignored
-- **Multiple Filters**: All specified filters must be satisfied (AND logic)
-- **List Filters**: For list filters like `gpu-names`, any value in the list is acceptable (OR logic)
-- **Default Ordering**: Machines are ordered by price (ascending) by default
-- **Machine Bans**: Machines that fail during startup are temporarily banned and excluded from future selections
+- **Exact vs range** — when an exact value is set, the matching `-min`/`-max` filters are ignored.
+- **AND across filters** — every annotation that is set must be satisfied.
+- **OR within a list** — `gpu-names`, `compute-cap`, `region`, etc. accept any value from the list.
+- **Default ordering** — candidates are sorted by price ascending.
+- **Bans (Vast.AI)** — machines that fail provisioning are banned for the configured timeout and skipped on subsequent retries. RunPod does not implement bans.

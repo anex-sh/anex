@@ -1,4 +1,4 @@
-module gitlab.devklarka.cz/ai/gpu-provider/docs
+module github.com/anex-sh/anex/docs
 
 go 1.24.6
 

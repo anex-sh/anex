@@ -92,7 +92,7 @@ appConfig:
     clusterUUID: "your-cluster-uuid"
 
   cloudProvider:
-    active: "vastAI"
+    active: "vastai"                  # one of: vastai, runpod, mock
     vastAI:
       apiKey: "your-vastai-api-key"   # Get this from https://cloud.vast.ai/account/
 
@@ -120,7 +120,8 @@ deployment:
   gateway:
     class: "node-port"
     domain: "your-minikube-ip"        # Run `minikube ip` to get this
-    nodePort: 31000
+    nodePortUDP: 31000                # Wireguard (Vast.AI)
+    nodePortTCP: 31001                # wstunnel (RunPod)
     image:
       repository: "your-registry.io/your-username/anex-gateway"
       tag: "v1.0.0"
@@ -138,6 +139,7 @@ appConfig:
     clusterUUID: "your-cluster-uuid"
 
   cloudProvider:
+    active: "vastai"                  # one of: vastai, runpod, mock
     vastAI:
       apiKey: "your-vastai-api-key"
 
@@ -168,12 +170,12 @@ Annotations on the pod tell Anex what kind of GPU machine to rent:
 
 ```yaml
 annotations:
-  anex.sh/region: "europe"              # Preferred region
-  anex.sh/gpu-names: "RTX 4090,RTX 3090"  # Acceptable GPU types (comma-separated)
-  anex.sh/price-max: "0.5"             # Maximum price per hour in USD
-  anex.sh/verified-only: "true"        # Only use verified/trusted hosts
-  anex.sh/disk-space-gb: "100"         # Disk space to request (in GB)
-  virtual: "true"                       # Required — marks this pod as a virtual pod
+  anex.sh/region: "europe"                  # Preferred region
+  anex.sh/gpu-names: "RTX 4090,RTX 3090"    # Acceptable GPU types (comma-separated)
+  anex.sh/price-max: "0.5"                  # Maximum price per hour in USD
+  anex.sh/disk-space-gb: "100"              # Disk space to request (in GB)
+  vastai.anex.sh/verified-only: "true"      # Vast.AI: only verified/trusted hosts
+  virtual: "true"                           # Required — marks this pod as a virtual pod
 ```
 
 ### Node Selector and Tolerations
@@ -206,7 +208,7 @@ metadata:
 spec:
   gateway:
     selector:
-      custom-gateway: "true"
+      gpu-provider-gateway: "true"
   service:
     selector:
       app: my-app          # Must match the pod's labels
@@ -242,7 +244,7 @@ metadata:
 spec:
   gateway:
     selector:
-      custom-gateway: "true"
+      gpu-provider-gateway: "true"
   service:
     selector:
       app: llama
@@ -262,7 +264,7 @@ metadata:
     anex.sh/region: "europe"
     anex.sh/gpu-names: "RTX 4090,RTX 3090"
     anex.sh/price-max: "0.5"
-    anex.sh/verified-only: "true"
+    vastai.anex.sh/verified-only: "true"
     anex.sh/disk-space-gb: "100"
     virtual: "true"
 spec:
@@ -371,7 +373,7 @@ metadata:
 spec:
   gateway:
     selector:
-      custom-gateway: "true"
+      gpu-provider-gateway: "true"
   service:
     selector:
       app: llama
@@ -425,7 +427,7 @@ metadata:
     anex.sh/region: "europe"
     anex.sh/gpu-names: "RTX 4090,RTX 3090"
     anex.sh/price-max: "0.5"
-    anex.sh/verified-only: "true"
+    vastai.anex.sh/verified-only: "true"
     anex.sh/disk-space-gb: "100"
     virtual: "true"
 spec:

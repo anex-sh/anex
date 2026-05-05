@@ -1,5 +1,5 @@
 baseURL = "/"
-title = "GPU Provider Documentation"
+title = "Anex Documentation"
 
 # Language settings
 contentDir = "content/en"
@@ -7,9 +7,6 @@ defaultContentLanguage = "en"
 defaultContentLanguageInSubdir = false
 enableRobotsTXT = true
 enableGitInfo = true
-
-# Docsy theme - using local path
-theme = ["docsy"]
 
 [module]
   proxy = "direct"
@@ -30,10 +27,10 @@ theme = ["docsy"]
 
 # Site params
 [params]
-  copyright = "GPU Provider Project"
-  
+  copyright = "Anex"
+
   # Repository configuration
-  github_repo = "https://gitlab.devklarka.cz/ai/gpu-provider"
+  github_repo = "https://github.com/anex-sh/anex"
   github_branch = "main"
   
   # Disable offline search and Font Awesome

@@ -1,33 +1,33 @@
 ---
-title: "GPU Provider Documentation"
+title: "Anex Documentation"
 ---
 
-{{< blocks/cover title="GPU Provider" image_anchor="top" height="full" >}}
+{{< blocks/cover title="Anex" image_anchor="top" height="full" >}}
 <a class="btn btn-lg btn-primary me-3 mb-4" href="/docs/">
   Learn More <i class="fas fa-arrow-alt-circle-right ms-2"></i>
 </a>
 <a class="btn btn-lg btn-secondary me-3 mb-4" href="/docs/getting-started/">
   Get Started <i class="fab fa-github ms-2 "></i>
 </a>
-<p class="lead mt-5">GPU Provider for Kubernetes - Virtual Kubelet Implementation</p>
+<p class="lead mt-5">Run GPU workloads on cheap cloud GPU providers from your existing Kubernetes cluster</p>
 {{< /blocks/cover >}}
 
 {{% blocks/lead color="primary" %}}
-GPU Provider enables Kubernetes clusters to provision GPU workloads on cloud providers through a Virtual Kubelet implementation. It seamlessly integrates with your existing Kubernetes infrastructure to provide flexible and cost-effective GPU computing resources.
+Anex lets you run GPU workloads on cheap cloud GPU providers (Vast.AI, RunPod) while managing them through your existing Kubernetes cluster. You write standard Kubernetes manifests, and Anex takes care of renting machines, setting up networking, and making remote GPU pods feel like they're part of your cluster.
 {{% /blocks/lead %}}
 
 {{% blocks/section color="dark" type="row" %}}
 
-{{% blocks/feature icon="fa-lightbulb" title="Easy Integration" %}}
-Integrate GPU resources into your Kubernetes cluster without complex setup. Works with standard Kubernetes APIs.
+{{% blocks/feature icon="fa-lightbulb" title="Native Kubernetes" %}}
+Standard Pods, Deployments and Jobs scheduled to a Virtual Kubelet node. No new APIs to learn — just pod annotations to pick the machine.
 {{% /blocks/feature %}}
 
 {{% blocks/feature icon="fab fa-github" title="Open Source" %}}
-Built on open source technologies and designed to work with multiple cloud providers.
+Source on [github.com/anex-sh/anex](https://github.com/anex-sh/anex). Pluggable cloud providers; Vast.AI and RunPod supported today.
 {{% /blocks/feature %}}
 
-{{% blocks/feature icon="fa-rocket" title="Scalable" %}}
-Automatically scale GPU resources based on your workload demands.
+{{% blocks/feature icon="fa-rocket" title="Cheap GPUs" %}}
+Rent only what you need, when you need it. Pods scale up by provisioning machines on demand and tear them down when removed.
 {{% /blocks/feature %}}
 
 {{% /blocks/section %}}

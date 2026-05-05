@@ -3,115 +3,143 @@ title: "Configuration"
 linkTitle: "Configuration"
 weight: 3
 description: >
-  Configuration guide
+  Helm chart values and provider configuration
 ---
 
-This document describes configuration options available for the Helm chart and the virtual kubelet. Both can be obviously set from shared values.yaml file.
+The Anex Helm chart takes a single `values.yaml`. All settings under `appConfig` map 1:1 to the virtual kubelet provider config (YAML on disk inside the pod). Every nested key can also be overridden by an environment variable formed from the path in `SCREAMING_SNAKE_CASE` joined by underscores — e.g. `cloudProvider.vastAI.apiKey` → `CLOUDPROVIDER_VASTAI_APIKEY`.
 
 ### Deployment
 
 ```yaml
 deployment:
-  # virtual kubelet pod can run on any node in the cluster; limit the restarts and rescheduling for better performance
+  # The provider pod can run on any node; restrict if useful for stability
   affinity: {}
   nodeSelector: {}
   tolerations: []
 
-  # VK Service Account annotation allows you to reference AWS IAM role and gain permission to generate an access token for ECR
+  # ServiceAccount annotations — e.g. AWS IAM role for ECR pull
   serviceAccount:
     annotations: {}
 
+  # mTLS for the virtual kubelet API (optional)
+  tls:
+    cert: ""
+    key: ""
+    caCert: ""
+
   gateway:
-    # enum: [aws-eks | node-port]
-    class: ""
-    # hostname or IP address of the gateway
-    domain: ""
-    # effective only with 'node-port' class
-    nodePort: 31000
+    class: ""           # enum: [aws-eks | node-port]
+    domain: ""          # public hostname or IP of the gateway
+    nodePortUDP: 31000  # Wireguard (Vast.AI) — used with class: node-port
+    nodePortTCP: 31001  # wstunnel (RunPod) — used with class: node-port
+    config:
+      # Pre-existing Secret holding gateway Wireguard config under key
+      # config.yaml. If empty, gateway-init generates fresh keys at startup
+      # into an emptyDir.
+      secretName: ""
 
   containers:
     virtualKubelet:
+      enabled: true
       image:
-        repository: "391135486350.dkr.ecr.eu-central-1.amazonaws.com/gpu-provider"
-        tag: latest
+        repository: "public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet"
+        tag: ""           # defaults to chart appVersion
         pullPolicy: Always
-
-      resources:
-        requests:
-          cpu: "0.5"
-          memory: "512Mi"
-        limits:
-          cpu: "0.5"
-          memory: "512Mi"
+      resources: {}
 
     gateway:
       image:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/gateway"
-        tag: latest
+        tag: ""
         pullPolicy: Always
+      resources: {}
 
-      resources:
-        requests:
-          cpu: "0.5"
-          memory: "256Mi"
-        limits:
-          cpu: "0.5"
-          memory: "256Mi"
+    gatewayController: {}
 ```
 
-### Virtual Kubelet Configuration
+### Application Configuration
 
 ```yaml
 appConfig:
   logLevel: "info"
 
-  # multiple clusters can run under same cloud provider account;
-  # correctly differentiate them by clusterUUID so garbage collection works properly
+  # Multiple clusters may share a cloud provider account.
+  # clusterUUID separates them so garbage collection works correctly.
   cluster:
     clusterUUID: ""
 
+  # CDN URLs for binaries downloaded onto Vast.AI machines (agent, wireproxy,
+  # promtail). Leave empty to use the Anex default CDN — in that case
+  # anexAuthToken must be set.
+  cdn:
+    agentURL: ""
+    wireproxyURL: ""
+    promtailURL: ""
+    anexAuthToken: ""
+
   cloudProvider:
+    # Required. One of: vastai, runpod, mock
+    active: "vastai"
+
     vastAI:
       apiKey: ""
 
+    runPod:
+      apiKey: ""
+      # URLs for binaries downloaded onto RunPod containers
+      initURL: ""
+      agentURL: ""
+      wireproxyURL: ""
+      wstunnelURL: ""
+      promtailURL: ""
+
   virtualNode:
-    # virtual node is created under with following name 
     nodeName: "virtual-node"
-    # current hard limit is 64 pods per node
+    # Hard pod limit reported by the virtual node
     podLimit: "10"
-    # virtual node will report the following resources and scheduler will consider them when scheduling pods 
+    # Resources advertised to the scheduler
     cpu: "1000"
     memory: "1000Gi"
+    # Extra labels and taints. Default taints are always applied.
     labels: {}
-    # additional taints for the node; see default taints below
     taints: []
 
   provisioning:
-    # maximum provisioning attempts; most provisioning steps are retried until timeout;  
+    # Maximum provisioning attempts; most steps are retried until timeout
     maxRetries: 10
-    
-    # timeout for complete provisioning
+
+    # Total budget for one provisioning attempt
     startupTimeout: "10m"
-    
-    # container agent reports status of a remote containers; should it fail to report within this timeout; 
-    # the pod will be restarted and the running machine destroyed
+
+    # Container agent reports status periodically; if it fails to report
+    # within this window the pod is restarted and the machine destroyed.
     statusReportTimeout: "2m"
-    
-    # should a machine fail during provisioning or fail to start within before startupTimeout
-    # it is banned from further attempts for specified period 
+
+    # If a machine fails provisioning or fails to start within startupTimeout,
+    # ban it for `timeout`. Vast.AI only — RunPod has no machine bans.
     machineBansStore:
       localFile:
         enable: true
         timeout: "1d"
 
+  gateway:
+    # Path inside the pod where Wireguard config is mounted
+    configPath: /gateway/config.yaml
 
-  # push container logs to the Loki gateway; right now this is the only way to export logs on managed Kubernetes 
+  # Push container logs to a Loki gateway. The only way to export logs from
+  # virtual pods on managed Kubernetes.
   promtail:
     enable: false
     clients: []
-    # clients: []
+    # clients:
     #   - url: "https://loki-gateway.example.com/loki/api/v1/push"
     #     basicAuth:
     #       username: ""
     #       password: ""
+
+  # mTLS paths inside the pod (set automatically when deployment.tls is used)
+  tls:
+    certPath: ""
+    keyPath: ""
+    caCertPath: ""
 ```

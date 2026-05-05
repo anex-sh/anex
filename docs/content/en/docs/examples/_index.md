@@ -3,24 +3,20 @@ title: "Examples"
 linkTitle: "Examples"
 weight: 5
 description: >
-  GPU Provider deployment examples
+  Anex deployment examples
 ---
 
-### Virtual Service
+### VirtualService
 
-Standard Kubernetes Services do not work with virtual pods. The `VirtualService` must be deployed. 
-It automatically creates a mirror `Service` with the same name and port, but routes traffic over Gateway, and therefore can reach the pods.
+A standard Kubernetes `Service` cannot route traffic to virtual pods because they run on remote machines outside the cluster network. Anex ships a `VirtualService` CRD (`anex.sh/v1alpha1`, short name `vsvc`) that creates a mirror `Service` of the same name and port, but routes traffic through the gateway to the remote pod.
 
-There are a few rough edges around the VirtualService integration at the moment:
-- Pods intended to be targeted must be **annotated** with `virtual: "true"`
-- The Service also needs to include the `gateway:` part as shown in the example (currently hardcoded)
-- Only `ClusterIP` type is supported
+Constraints:
+- Pods to be targeted must carry the annotation `virtual: "true"`
+- The `gateway.selector` must match the gateway pod's labels — by default the chart sets `gpu-provider-gateway: "true"`
+- TCP only; `targetPort` must be an integer (named ports are not supported)
+- `Type` may be `ClusterIP` (default) or `NodePort`
 
-Use `kubectl port-forward service/fancy-page <local-port>:80` to query
-
-Coming soon:
-- Support for the full Kubernetes Service API, including `LoadBalancer` and `NodePort` types
-
+Use `kubectl port-forward service/<name> <local-port>:<service-port>` for ad-hoc access, or place an Ingress in front of the generated Service.
 
 ```yaml
 apiVersion: anex.sh/v1alpha1
@@ -28,11 +24,11 @@ kind: VirtualService
 metadata:
   name: fancy-page
 spec:
-  # gateway key is hard-coded default; for now it must be explicitly set 
   gateway:
     selector:
-      custom-gateway: "true"
+      gpu-provider-gateway: "true"
   service:
+    # type: ClusterIP   # default; NodePort also supported
     selector:
       app: nginx
     ports:
@@ -57,8 +53,7 @@ spec:
         anex.sh/region: "europe"
         anex.sh/gpu-names: "RTX 4090"
         anex.sh/price-max: "0.3"
-        anex.sh/verified-only: "true"
-        # mark the pod as virtual to be a valid Virtual Service target
+        # marks the pod as a valid VirtualService target
         virtual: "true"
     spec:
       containers:
@@ -96,13 +91,9 @@ data:
   index.html: |
     <!DOCTYPE html>
     <html>
-    <head>
-        <title>Welcome to VastAI</title>
-        <meta charset="utf-8" />
-    </head>
-    <body>
-    <h1>Welcome to VastAI</h1>
-    <p>The system is running.</p>
-    </body>
+    <head><title>Anex</title><meta charset="utf-8" /></head>
+    <body><h1>Hello from a rented GPU</h1></body>
     </html>
 ```
+
+For end-to-end examples (llama.cpp on Minikube and AWS with TLS Ingress + bearer auth), see the [project README](https://github.com/anex-sh/anex#deployment-examples).
