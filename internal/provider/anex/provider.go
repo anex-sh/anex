@@ -116,11 +116,12 @@ func NewGlamiProvider(providerConfig string, operatingSystem string, internalIP 
 			clusterUUID,
 			config.VirtualNode.NodeName,
 			runpod.URLConfig{
-				InitURL:      config.CloudProvider.RunPod.InitURL,
-				AgentURL:     config.CloudProvider.RunPod.AgentURL,
-				WireproxyURL: config.CloudProvider.RunPod.WireproxyURL,
-				WstunnelURL:  config.CloudProvider.RunPod.WstunnelURL,
-				PromtailURL:  config.CloudProvider.RunPod.PromtailURL,
+				InitURL:      config.CDN.InitURL,
+				AgentURL:     config.CDN.AgentURL,
+				WireproxyURL: config.CDN.WireproxyURL,
+				WstunnelURL:  config.CDN.WstunnelURL,
+				PromtailURL:  config.CDN.PromtailURL,
+				AuthToken:    config.CDN.AnexAuthToken,
 			},
 		)
 	case "vastai":
