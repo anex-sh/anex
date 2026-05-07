@@ -302,7 +302,7 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 		}
 	}
 	// Compose container agent invocation with flags, then `--` followed by safely-quoted argv
-	commandWrapper := fmt.Sprintf("/container_agent run -p 8080")
+	commandWrapper := fmt.Sprintf("/usr/bin/container_agent run -p 8080")
 	if proxy.Enabled {
 		commandWrapper += " --proxy"
 	}

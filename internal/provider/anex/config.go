@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/anex-sh/anex/virtualpod"
+	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -41,12 +42,7 @@ type VastAIConfig struct {
 
 // RunPodConfig holds RunPod-specific configuration
 type RunPodConfig struct {
-	APIKey       string `yaml:"apiKey"`
-	InitURL      string `yaml:"initURL"`
-	AgentURL     string `yaml:"agentURL"`
-	WireproxyURL string `yaml:"wireproxyURL"`
-	WstunnelURL  string `yaml:"wstunnelURL"`
-	PromtailURL  string `yaml:"promtailURL"`
+	APIKey string `yaml:"apiKey"`
 }
 
 // CloudProviderConfig holds cloud provider configuration
@@ -56,11 +52,13 @@ type CloudProviderConfig struct {
 	RunPod RunPodConfig `yaml:"runPod"`
 }
 
-// CDNConfig holds binary CDN URLs and auth token for vast.ai provisioning.
+// CDNConfig holds binary CDN URLs and auth token for provisioning.
 type CDNConfig struct {
 	AgentURL      string `yaml:"agentURL"`
 	WireproxyURL  string `yaml:"wireproxyURL"`
+	WstunnelURL   string `yaml:"wstunnelURL"`
 	PromtailURL   string `yaml:"promtailURL"`
+	InitURL       string `yaml:"initURL"`
 	AnexAuthToken string `yaml:"anexAuthToken"`
 }
 
@@ -198,21 +196,6 @@ func (c *ProviderConfig) overrideWithEnv() {
 	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "apiKey")); val != "" {
 		c.CloudProvider.RunPod.APIKey = val
 	}
-	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "initURL")); val != "" {
-		c.CloudProvider.RunPod.InitURL = val
-	}
-	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "agentURL")); val != "" {
-		c.CloudProvider.RunPod.AgentURL = val
-	}
-	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "wireproxyURL")); val != "" {
-		c.CloudProvider.RunPod.WireproxyURL = val
-	}
-	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "wstunnelURL")); val != "" {
-		c.CloudProvider.RunPod.WstunnelURL = val
-	}
-	if val := os.Getenv(getEnvWithPrefix("cloudProvider", "runPod", "promtailURL")); val != "" {
-		c.CloudProvider.RunPod.PromtailURL = val
-	}
 
 	// CDN
 	if val := os.Getenv(getEnvWithPrefix("cdn", "agentURL")); val != "" {
@@ -221,8 +204,14 @@ func (c *ProviderConfig) overrideWithEnv() {
 	if val := os.Getenv(getEnvWithPrefix("cdn", "wireproxyURL")); val != "" {
 		c.CDN.WireproxyURL = val
 	}
+	if val := os.Getenv(getEnvWithPrefix("cdn", "wstunnelURL")); val != "" {
+		c.CDN.WstunnelURL = val
+	}
 	if val := os.Getenv(getEnvWithPrefix("cdn", "promtailURL")); val != "" {
 		c.CDN.PromtailURL = val
+	}
+	if val := os.Getenv(getEnvWithPrefix("cdn", "initURL")); val != "" {
+		c.CDN.InitURL = val
 	}
 	if val := os.Getenv(getEnvWithPrefix("cdn", "anexAuthToken")); val != "" {
 		c.CDN.AnexAuthToken = val
@@ -419,13 +408,18 @@ func LoadConfig(providerConfig string) (config ProviderConfig, err error) {
 		return config, fmt.Errorf("cloudProvider.active must be one of: vastai, runpod, mock (got %q)", config.CloudProvider.Active)
 	}
 
-	// Validate CDN auth token when defaults are in use (vastai only).
-	if strings.ToLower(config.CloudProvider.Active) == "vastai" && config.CDN.AnexAuthToken == "" {
+	// Warn if CDN auth/URLs missing — base images that bake in the binaries
+	// don't need CDN downloads, but a misconfigured deploy will fail at runtime.
+	active := strings.ToLower(config.CloudProvider.Active)
+	if (active == "vastai" || active == "runpod") && config.CDN.AnexAuthToken == "" {
 		if config.CDN.AgentURL == "" || config.CDN.WireproxyURL == "" {
-			return config, fmt.Errorf("cdn.anexAuthToken is required when cdn.agentURL or cdn.wireproxyURL is unset (defaults to Anex CDN which requires authentication)")
+			log.L.Warnf("cdn.anexAuthToken is empty and cdn.agentURL or cdn.wireproxyURL is unset; binary downloads will fail unless the container image already provides them")
 		}
 		if config.Promtail.Enable && config.CDN.PromtailURL == "" {
-			return config, fmt.Errorf("cdn.anexAuthToken is required when cdn.promtailURL is unset and promtail is enabled")
+			log.L.Warnf("cdn.anexAuthToken is empty and cdn.promtailURL is unset; promtail download will fail unless the container image already provides it")
+		}
+		if active == "runpod" && (config.CDN.WstunnelURL == "" || config.CDN.InitURL == "") {
+			log.L.Warnf("cdn.anexAuthToken is empty and cdn.wstunnelURL or cdn.initURL is unset; runpod init/wstunnel downloads will fail unless the container image already provides them")
 		}
 	}
 

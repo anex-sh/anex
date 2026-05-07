@@ -31,6 +31,7 @@ deployment:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet"
         tag: ""
         pullPolicy: Always
+      env: []
 
       resources: {}
 #        requests:
@@ -45,6 +46,7 @@ deployment:
         repository: "public.ecr.aws/m4v1f8q5/gpu-provider/gateway"
         tag: ""
         pullPolicy: Always
+      env: []
 
       # TODO: Remove requirements
       resources: {}
@@ -75,7 +77,9 @@ appConfig:
   cdn:
     agentURL: ""
     wireproxyURL: ""
+    wstunnelURL: ""
     promtailURL: ""
+    initURL: ""
     anexAuthToken: ""
 
   cloudProvider:
@@ -84,7 +88,7 @@ appConfig:
 
   virtualNode:
     nodeName: "virtual-node"
-    podLimit: "10"
+    podLimit: "64"
     cpu: "1000"
     memory: "1000Gi"
     labels: {}

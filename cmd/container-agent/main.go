@@ -68,7 +68,7 @@ func main() {
 		Short: "Run the container agent",
 		Long: `Run the container agent to simulate pod runtime behavior. 
 Pass the container command after -- to avoid flag parsing issues, e.g.:
-  /container_agent run -p 8080 -- /bin/bash -c 'echo hello && sleep 1'`,
+  container_agent run -p 8080 -- /bin/bash -c 'echo hello && sleep 1'`,
 		Run: func(cmd *cobra.Command, args []string) {
 			a := agent.NewAgent(port, command, "/etc/virtualpod")
 			// Prefer argv provided after '--'; fallback to legacy -c if empty
