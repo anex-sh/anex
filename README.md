@@ -96,6 +96,9 @@ appConfig:
     vastAI:
       apiKey: "your-vastai-api-key"   # Get this from https://cloud.vast.ai/account/
 
+  cdn:
+    anexAuthToken: ""  # Create an account on https://anex.sh/ and get token from your profile page"
+
   virtualNode:
     nodeName: "anex-virtual-node"     # Must be unique in your cluster
     labels:
@@ -140,6 +143,9 @@ appConfig:
   cloudProvider:
     vastAI:
       apiKey: "your-vastai-api-key"
+
+  cdn:
+    anexAuthToken: ""  # Create an account on https://anex.sh/ and get token from your profile page"
 
   virtualNode:
     nodeName: "virtual-node-name"
