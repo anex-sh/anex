@@ -18,7 +18,7 @@ func TestGenerateOnStartScriptRendersParams(t *testing.T) {
 		"cd /work",
 		"curl https://wireproxy/bin -o /usr/bin/wireproxy",
 		"curl https://promtail/bin -o /usr/bin/promtail",
-		"curl https://agent/bin -o /container_agent",
+		"curl https://agent/bin -o /usr/bin/container_agent",
 		"python app.py",
 	}
 	for _, sub := range checks {

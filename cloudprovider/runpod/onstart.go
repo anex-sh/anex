@@ -83,7 +83,7 @@ func joinShellArgs(args []string) string {
 // ProvisionEnv holds all environment variables needed by init.sh.
 type ProvisionEnv struct {
 	WireproxyConfig string // base64-encoded wireproxy config
-	AgentCmd        string // /container_agent run ...
+	AgentCmd        string // /usr/bin/container_agent run ...
 	Workdir         string
 	AgentURL        string
 	WireproxyURL    string
@@ -144,7 +144,7 @@ func BuildProvisionEnv(pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bo
 		}
 	}
 
-	agentCmd := "/container_agent run -p 8080"
+	agentCmd := "/usr/bin/container_agent run -p 8080"
 	if proxy.Enabled {
 		agentCmd += " --proxy"
 	}
@@ -164,11 +164,11 @@ func BuildProvisionEnv(pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bo
 		WireproxyConfig: base64.StdEncoding.EncodeToString([]byte(wpConfig)),
 		AgentCmd:        agentCmd,
 		Workdir:         workdir,
-		AgentURL:        urls.AgentURL,
-		WireproxyURL:    urls.WireproxyURL,
-		WstunnelURL:     urls.WstunnelURL,
-		PromtailURL:     urls.PromtailURL,
-		InitURL:         urls.InitURL,
+		AgentURL:        resolveCDNURL(urls.AgentURL, DefaultAgentURL, urls.AuthToken),
+		WireproxyURL:    resolveCDNURL(urls.WireproxyURL, DefaultWireproxyURL, urls.AuthToken),
+		WstunnelURL:     resolveCDNURL(urls.WstunnelURL, DefaultWstunnelURL, urls.AuthToken),
+		PromtailURL:     resolveCDNURL(urls.PromtailURL, DefaultPromtailURL, urls.AuthToken),
+		InitURL:         resolveCDNURL(urls.InitURL, DefaultInitURL, urls.AuthToken),
 		GatewayEndpoint: proxy.Server.Endpoint,
 		GatewayWSPort:   fmt.Sprintf("%d", proxy.Server.PortTCP),
 	}

@@ -20,13 +20,24 @@ import (
 
 const baseURL = "https://rest.runpod.io/v1"
 
-// URLConfig holds CDN URLs for binaries and init script.
+const (
+	DefaultInitURL      = "https://glami-gpu-provider.glami-ml.com/runpod_init.sh"
+	DefaultAgentURL     = "https://glami-gpu-provider.glami-ml.com/container_agent_v0.4.2"
+	DefaultWireproxyURL = "https://glami-gpu-provider.glami-ml.com/wireproxy"
+	DefaultWstunnelURL  = "https://glami-gpu-provider.glami-ml.com/wstunnel"
+	DefaultPromtailURL  = "https://glami-gpu-provider.glami-ml.com/promtail"
+)
+
+// URLConfig holds the CDN URLs for the init script and binaries downloaded
+// by the on-start script. Empty fields fall back to the default Anex CDN
+// URLs with AuthToken appended as a query string.
 type URLConfig struct {
 	InitURL      string
 	AgentURL     string
 	WireproxyURL string
 	WstunnelURL  string
 	PromtailURL  string
+	AuthToken    string
 }
 
 type podResponse struct {

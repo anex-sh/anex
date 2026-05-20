@@ -59,7 +59,7 @@ spec:
               value: "{{ .Values.deployment.gateway.nodePortTCP }}"
               {{- end }}
             - name: PEER_COUNT
-              value: "32"
+              value: "{{ .Values.appConfig.virtualNode.podLimit }}"
           volumeMounts:
             - name: gateway-config
               mountPath: /gateway
@@ -77,8 +77,6 @@ spec:
             {{- toYaml .Values.deployment.containers.virtualKubelet.resources | nindent 12 }}
           {{- end }}
           env:
-            - name: BANS_OVERWRITE
-              value: "{\"203531\":\"2026-01-08T06:30:36.205086888+01:00\"}"
             - name: GATEWAY_CONFIG_PATH
               value: "/gateway/config.yaml"
             - name: PROXY_ENABLE
@@ -94,6 +92,9 @@ spec:
               value: "/etc/kubelet-tls/tls.key"
             - name: TLS_CA_CERT_PATH
               value: "/etc/kubelet-tls/ca.crt"
+            {{- end }}
+            {{- with .Values.deployment.containers.virtualKubelet.env }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           volumeMounts:
             - name: virtual-kubelet-config
@@ -115,6 +116,9 @@ spec:
           env:
             - name: GATEWAY_CONFIG_PATH
               value: "/gateway/config.yaml"
+            {{- with .Values.deployment.containers.gateway.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: wg
               containerPort: 51820

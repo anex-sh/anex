@@ -37,6 +37,11 @@ sleep 3
 
 touch ~/.no_auto_tmux
 
+chown root:root /root
+chown -R root:root /root/.ssh
+chmod 700 /root/.ssh
+chmod 600 /root/.ssh/authorized_keys
+
 ensure_curl() {
     if command -v curl >/dev/null 2>&1; then
         return 0
@@ -59,6 +64,11 @@ ensure_curl || {
     echo "curl is required but could not be installed"
     exit 1
 }
+
+[ -e /usr/bin/wireproxy ] || { curl {{ .WireproxyURL }} -o /usr/bin/wireproxy && chmod +x /usr/bin/wireproxy; }
+[ -e /usr/bin/promtail ] || { curl {{ .PromtailURL }} -o /usr/bin/promtail && chmod +x /usr/bin/promtail; }
+[ -e /usr/bin/container_agent ] || { curl {{ .AgentURL }} -o /usr/bin/container_agent && chmod +x /usr/bin/container_agent; }
+
 
 export GPU_PROVIDER_GATEWAY_CLIENT_ADDRESS={{ .ProxyConfig.Client.Address }}
 export GPU_PROVIDER_GATEWAY_CLIENT_PK={{ .ProxyConfig.Client.PrivateKey }}
@@ -107,19 +117,6 @@ unset AWS_WEB_IDENTITY_TOKEN_FILE
 {{- if .Workdir }}
 cd {{ .Workdir }}
 {{- end }}
-
-curl {{ .WireproxyURL }} -o /usr/bin/wireproxy
-curl {{ .PromtailURL }} -o /usr/bin/promtail
-curl {{ .AgentURL }} -o /container_agent
-
-chmod +x /usr/bin/wireproxy
-chmod +x /usr/bin/promtail
-chmod +x /container_agent
-
-chown root:root /root
-chown -R root:root /root/.ssh
-chmod 700 /root/.ssh
-chmod 600 /root/.ssh/authorized_keys
 
 {{ .Command }}
 `
