@@ -42,7 +42,14 @@ make build-container-agent    # Just the container agent
 
 ### Build and Push Docker Images
 
-You need to host two Docker images in a registry your cluster can pull from:
+Pre-built images are published to ECR and used by the Helm chart by default:
+
+| Image | Registry |
+|---|---|
+| Virtual Kubelet | `public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet` |
+| Gateway | `public.ecr.aws/m4v1f8q5/gpu-provider/gateway` |
+
+If you need to build and push your own images (e.g. for custom modifications):
 
 ```bash
 # Choose your registry and version tag
@@ -74,15 +81,17 @@ On AWS, Anex uses a LoadBalancer to expose the gateway. Create a file called `in
 deployment:
   gateway:
     class: "aws-eks"
-    image:
-      repository: "your-registry.io/your-username/anex-gateway"
-      tag: "v1.0.0"
-      pullPolicy: Always
 
   containers:
     virtualKubelet:
       image:
         repository: "your-registry.io/your-username/anex"
+        tag: "v1.0.0"
+        pullPolicy: Always
+
+    gateway:
+      image:
+        repository: "your-registry.io/your-username/anex-gateway"
         tag: "v1.0.0"
         pullPolicy: Always
 
@@ -123,11 +132,8 @@ deployment:
   gateway:
     class: "node-port"
     domain: "your-minikube-ip"        # Run `minikube ip` to get this
-    nodePort: 31000
-    image:
-      repository: "your-registry.io/your-username/anex-gateway"
-      tag: "v1.0.0"
-      pullPolicy: Always
+    nodePortUDP: 31000
+    nodePortTCP: 31001
 
   containers:
     virtualKubelet:
@@ -136,11 +142,18 @@ deployment:
         tag: "v1.0.0"
         pullPolicy: Always
 
+    gateway:
+      image:
+        repository: "your-registry.io/your-username/anex-gateway"
+        tag: "v1.0.0"
+        pullPolicy: Always
+
 appConfig:
   cluster:
     clusterUUID: "your-cluster-uuid"
 
   cloudProvider:
+    active: "vastAI"
     vastAI:
       apiKey: "your-vastai-api-key"
 
@@ -174,12 +187,12 @@ Annotations on the pod tell Anex what kind of GPU machine to rent:
 
 ```yaml
 annotations:
-  anex.sh/region: "europe"              # Preferred region
-  anex.sh/gpu-names: "RTX 4090,RTX 3090"  # Acceptable GPU types (comma-separated)
-  anex.sh/price-max: "0.5"             # Maximum price per hour in USD
-  anex.sh/verified-only: "true"        # Only use verified/trusted hosts
-  anex.sh/disk-space-gb: "100"         # Disk space to request (in GB)
-  virtual: "true"                       # Required — marks this pod as a virtual pod
+  anex.sh/region: "europe"                    # Preferred region
+  anex.sh/gpu-names: "RTX 4090,RTX 3090"      # Acceptable GPU types (comma-separated)
+  anex.sh/price-max: "0.5"                    # Maximum price per hour in USD
+  vastai.anex.sh/verified-only: "true"        # Only use verified/trusted hosts (VastAI-specific)
+  anex.sh/disk-space-gb: "100"                # Disk space to request (in GB)
+  virtual: "true"                             # Required — marks this pod as a virtual pod
 ```
 
 ### Node Selector and Tolerations
@@ -268,7 +281,7 @@ metadata:
     anex.sh/region: "europe"
     anex.sh/gpu-names: "RTX 4090,RTX 3090"
     anex.sh/price-max: "0.5"
-    anex.sh/verified-only: "true"
+    vastai.anex.sh/verified-only: "true"
     anex.sh/disk-space-gb: "100"
     virtual: "true"
 spec:
@@ -431,7 +444,7 @@ metadata:
     anex.sh/region: "europe"
     anex.sh/gpu-names: "RTX 4090,RTX 3090"
     anex.sh/price-max: "0.5"
-    anex.sh/verified-only: "true"
+    vastai.anex.sh/verified-only: "true"
     anex.sh/disk-space-gb: "100"
     virtual: "true"
 spec:
