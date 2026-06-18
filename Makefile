@@ -151,14 +151,14 @@ docker-build: docker-build-kubelet docker-build-gateway
 # Tag and push virtual-kubelet image to ECR
 docker-push-kubelet: docker-build-kubelet
 	@echo "Pushing virtual-kubelet image as $(VERSION)..."
-	docker tag virtual-kubelet:latest public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet:$(VERSION)
-	docker push public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet:$(VERSION)
+	docker tag virtual-kubelet:latest public.ecr.aws/d3n7e4w7/gpu-provider/virtual-kubelet:$(VERSION)
+	docker push public.ecr.aws/d3n7e4w7/gpu-provider/virtual-kubelet:$(VERSION)
 
 # Tag and push gateway image to ECR
 docker-push-gateway: docker-build-gateway
 	@echo "Pushing gateway image as $(VERSION)..."
-	docker tag gateway:latest public.ecr.aws/m4v1f8q5/gpu-provider/gateway:$(VERSION)
-	docker push public.ecr.aws/m4v1f8q5/gpu-provider/gateway:$(VERSION)
+	docker tag gateway:latest public.ecr.aws/d3n7e4w7/gpu-provider/gateway:$(VERSION)
+	docker push public.ecr.aws/d3n7e4w7/gpu-provider/gateway:$(VERSION)
 
 # Push all Docker images to ECR
 docker-push: docker-push-kubelet docker-push-gateway
@@ -180,7 +180,7 @@ kind-stop:
 helm-release:
 	@echo "Packaging Helm chart (version=$(VERSION))..."
 	helm package deploy/chart --version $(VERSION) --app-version v$(VERSION)
-	helm push helm-$(VERSION).tgz oci://public.ecr.aws/m4v1f8q5/gpu-provider
+	helm push helm-$(VERSION).tgz oci://public.ecr.aws/d3n7e4w7/gpu-provider
 	rm helm-$(VERSION).tgz
 
 # Install controller-gen if not present

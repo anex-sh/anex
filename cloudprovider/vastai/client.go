@@ -25,9 +25,9 @@ type BansConfig struct {
 }
 
 const (
-	DefaultAgentURL     = "https://glami-gpu-provider.glami-ml.com/container_agent_v0.4.2"
-	DefaultWireproxyURL = "https://glami-gpu-provider.glami-ml.com/wireproxy"
-	DefaultPromtailURL  = "https://glami-gpu-provider.glami-ml.com/promtail"
+	DefaultAgentURL     = "https://provider.anex.sh/binary/container_agent_v0.4.2"
+	DefaultWireproxyURL = "https://provider.anex.sh/binary/wireproxy"
+	DefaultPromtailURL  = "https://provider.anex.sh/binary/promtail"
 )
 
 // URLConfig holds the CDN URLs for the agent/wireproxy/promtail binaries
