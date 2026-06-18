@@ -21,11 +21,11 @@ import (
 const baseURL = "https://rest.runpod.io/v1"
 
 const (
-	DefaultInitURL      = "https://glami-gpu-provider.glami-ml.com/runpod_init.sh"
-	DefaultAgentURL     = "https://glami-gpu-provider.glami-ml.com/container_agent_v0.4.2"
-	DefaultWireproxyURL = "https://glami-gpu-provider.glami-ml.com/wireproxy"
-	DefaultWstunnelURL  = "https://glami-gpu-provider.glami-ml.com/wstunnel"
-	DefaultPromtailURL  = "https://glami-gpu-provider.glami-ml.com/promtail"
+	DefaultInitURL      = "https://provider.anex.sh/binary/runpod_init.sh"
+	DefaultAgentURL     = "https://provider.anex.sh/binary/container_agent_v0.4.2"
+	DefaultWireproxyURL = "https://provider.anex.sh/binary/wireproxy"
+	DefaultWstunnelURL  = "https://provider.anex.sh/binary/wstunnel"
+	DefaultPromtailURL  = "https://provider.anex.sh/binary/promtail"
 )
 
 // URLConfig holds the CDN URLs for the init script and binaries downloaded

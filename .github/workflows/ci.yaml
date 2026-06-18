@@ -8,7 +8,7 @@ on:
 
 env:
   GO_VERSION: '1.24'
-  REGISTRY: public.ecr.aws/m4v1f8q5/gpu-provider
+  REGISTRY: public.ecr.aws/d3n7e4w7/gpu-provider
   AWS_REGION: us-east-1
   GOOS: linux
   GOARCH: amd64

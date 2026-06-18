@@ -98,6 +98,6 @@ controller-gen crd paths="./..."             # regenerate CRD manifests
 ## Docker Images
 
 ```bash
-make docker-build-kubelet VERSION=<tag>   # → public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet
-make docker-build-gateway VERSION=<tag>   # → public.ecr.aws/m4v1f8q5/gpu-provider/gateway
+make docker-build-kubelet VERSION=<tag>   # → public.ecr.aws/d3n7e4w7/gpu-provider/virtual-kubelet
+make docker-build-gateway VERSION=<tag>   # → public.ecr.aws/d3n7e4w7/gpu-provider/gateway
 ```

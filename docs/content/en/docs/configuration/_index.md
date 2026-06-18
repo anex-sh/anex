@@ -46,7 +46,7 @@ deployment:
 
     gateway:
       image:
-        repository: "public.ecr.aws/m4v1f8q5/gpu-provider/gateway"
+        repository: "public.ecr.aws/d3n7e4w7/gpu-provider/gateway"
         tag: latest
         pullPolicy: Always
 
