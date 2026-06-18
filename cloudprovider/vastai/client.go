@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,6 +29,15 @@ const (
 	DefaultAgentURL     = "https://provider.anex.sh/binary/container_agent_v0.4.2"
 	DefaultWireproxyURL = "https://provider.anex.sh/binary/wireproxy"
 	DefaultPromtailURL  = "https://provider.anex.sh/binary/promtail"
+)
+
+// Vast.AI API version path segments. The base URL is configured on v0 and
+// every endpoint still lives there except the "show instances" listing, which
+// Vast.AI migrated to v1. We keep v0 as the base and derive the v1 root only
+// for that one call so both versions are supported side by side.
+const (
+	vastAIAPIPathV0 = "/api/v0"
+	vastAIAPIPathV1 = "/api/v1"
 )
 
 // URLConfig holds the CDN URLs for the agent/wireproxy/promtail binaries
@@ -74,21 +84,62 @@ func (c *Client) buildMachineLabel(podUID interface{}) string {
 	return fmt.Sprintf("%s:%s:%s:%s", prefix, c.clusterUID, c.nodeName, podUID)
 }
 
-func (c *Client) listMachinesInternal(ctx context.Context) ([]*Machine, error) {
-	url := c.baseURL + "/instances/"
+// v1BaseURL returns the configured base URL with its API version path segment
+// swapped from v0 to v1. If the base URL does not carry the expected v0
+// segment (e.g. in tests) it is returned unchanged.
+func (c *Client) v1BaseURL() string {
+	if strings.Contains(c.baseURL, vastAIAPIPathV0) {
+		return strings.Replace(c.baseURL, vastAIAPIPathV0, vastAIAPIPathV1, 1)
+	}
+	return c.baseURL
+}
 
-	type MachineList struct {
+// instancesPageLimit is the page size requested from the v1 "show instances"
+// endpoint. Vast.AI caps this at 25; larger values are ignored.
+const instancesPageLimit = 25
+
+func (c *Client) listMachinesInternal(ctx context.Context) ([]*Machine, error) {
+	// The "show instances" listing lives on the v1 API; everything else stays
+	// on v0. v1 is keyset-paginated (max 25 instances per page), so we follow
+	// next_token until it is empty to collect every instance — anything missed
+	// here would be skipped by pruning and leak.
+	listURL := c.v1BaseURL() + "/instances/"
+
+	type machineListPage struct {
 		Instances []*Machine `json:"instances"`
+		// NextToken is the keyset cursor for the next page; empty/null on the
+		// final page. It is sent back as the after_token query parameter.
+		NextToken string `json:"next_token"`
 	}
 
-	_, machineList, err := utils.MakeRequest[MachineList](ctx, c.retryClient, http.MethodGet, url, nil, c.authHeader)
-	if err != nil {
-		return nil, err
+	var instances []*Machine
+	afterToken := ""
+	for {
+		q := url.Values{}
+		q.Set("limit", strconv.Itoa(instancesPageLimit))
+		if afterToken != "" {
+			q.Set("after_token", afterToken)
+		}
+		pageURL := listURL + "?" + q.Encode()
+
+		_, page, err := utils.MakeRequest[machineListPage](ctx, c.retryClient, http.MethodGet, pageURL, nil, c.authHeader)
+		if err != nil {
+			return nil, err
+		}
+
+		instances = append(instances, page.Instances...)
+
+		// Stop on the final page, or if the cursor fails to advance (defensive
+		// guard against an unexpectedly repeating token).
+		if page.NextToken == "" || page.NextToken == afterToken {
+			break
+		}
+		afterToken = page.NextToken
 	}
 
 	// Filter machines that match clusterUID and node name. Drop the rest.
 	var filteredMachines []*Machine
-	for _, machine := range machineList.Instances {
+	for _, machine := range instances {
 		label := parseMachineLabel(machine.Label)
 		if label == nil {
 			continue

@@ -19,6 +19,23 @@ func TestBuildMachineLabel(t *testing.T) {
 	}
 }
 
+func TestV1BaseURL(t *testing.T) {
+	// The base URL stays on v0; only the instances listing is derived to v1.
+	c := NewClient("https://console.vast.ai/api/v0", "apikey", "cluster123", "node-a", URLConfig{}, BansConfig{})
+	if got := c.v1BaseURL(); got != "https://console.vast.ai/api/v1" {
+		t.Fatalf("expected v1 base URL, got %s", got)
+	}
+	if c.baseURL != "https://console.vast.ai/api/v0" {
+		t.Fatalf("base URL must remain on v0, got %s", c.baseURL)
+	}
+
+	// Base URLs without the v0 segment are returned unchanged.
+	c2 := NewClient("http://example", "apikey", "cluster123", "node-a", URLConfig{}, BansConfig{})
+	if got := c2.v1BaseURL(); got != "http://example" {
+		t.Fatalf("expected unchanged base URL, got %s", got)
+	}
+}
+
 func TestSortCandidatesByPriceAscending(t *testing.T) {
 	cands := []BundleOffer{{ID: 1, DphTotal: 0.5}, {ID: 2, DphTotal: 0.1}, {ID: 3, DphTotal: 0.3}}
 	out := sortCandidates(cands)

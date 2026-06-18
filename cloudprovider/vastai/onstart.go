@@ -38,6 +38,7 @@ sleep 3
 touch ~/.no_auto_tmux
 
 mkdir -p /root/.ssh
+touch /root/.ssh/authorized_keys
 chown root:root /root
 chown -R root:root /root/.ssh
 chmod 700 /root/.ssh
