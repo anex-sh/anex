@@ -371,7 +371,7 @@ func (c *Client) ProvisionMachine(ctx context.Context, candidatesID []string, po
 	}
 
 	// Check if the image is from AWS ECR registry; if so, build ECR login string
-	if strings.Contains(image, ".dkr.ecr.") && strings.Contains(image, ".amazonaws.com") {
+	if utils.IsAWSECRImage(image) {
 		payload["image_login"] = utils.GetAWSECRLogin(ctx, image)
 	}
 
