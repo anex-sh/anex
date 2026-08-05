@@ -11,9 +11,22 @@ import (
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 )
 
+// ECRCredentials holds docker registry credentials minted from an AWS ECR
+// authorization token. The token (and thus Password) is valid for 12 hours.
+type ECRCredentials struct {
+	Username string
+	Password string
+	Registry string
+}
+
 var getECRCredentialsFunc = getECRCredentials
 
-func getECRCredentials(ctx context.Context, accountId string, awsRegion string) (map[string]string, error) {
+// IsAWSECRImage reports whether the image reference points at an AWS ECR registry.
+func IsAWSECRImage(image string) bool {
+	return strings.Contains(image, ".dkr.ecr.") && strings.Contains(image, ".amazonaws.com")
+}
+
+func getECRCredentials(ctx context.Context, accountId string, awsRegion string) (*ECRCredentials, error) {
 	logger := log.G(ctx)
 	logger.Info("Getting ECR credentials for region: " + awsRegion)
 
@@ -50,28 +63,34 @@ func getECRCredentials(ctx context.Context, accountId string, awsRegion string) 
 		return nil, fmt.Errorf("invalid authorization token format")
 	}
 
-	username := parts[0]
-	password := parts[1]
-
-	return map[string]string{
-		"username": username,
-		"password": password,
-		"registry": fmt.Sprintf("https://%s.dkr.ecr.%s.amazonaws.com", accountId, awsRegion),
+	return &ECRCredentials{
+		Username: parts[0],
+		Password: parts[1],
+		Registry: fmt.Sprintf("https://%s.dkr.ecr.%s.amazonaws.com", accountId, awsRegion),
 	}, nil
 }
 
-func GetAWSECRLogin(ctx context.Context, image string) string {
-	logger := log.G(ctx)
+// GetAWSECRCredentials mints fresh credentials for the ECR registry the image
+// belongs to, using the default AWS credential chain.
+func GetAWSECRCredentials(ctx context.Context, image string) (*ECRCredentials, error) {
 	parts := strings.Split(image, ".")
+	if len(parts) < 4 {
+		return nil, fmt.Errorf("unexpected ECR image reference: %s", image)
+	}
 	accountID := parts[0]
 	region := parts[3]
 
-	ecrCredentials, err := getECRCredentialsFunc(ctx, accountID, region)
+	return getECRCredentialsFunc(ctx, accountID, region)
+}
+
+// GetAWSECRLogin returns ECR credentials in Vast.AI's docker login format
+// ("-u <user> -p <password> <registry>"), or "" if they cannot be obtained.
+func GetAWSECRLogin(ctx context.Context, image string) string {
+	logger := log.G(ctx)
+	creds, err := GetAWSECRCredentials(ctx, image)
 	if err != nil {
 		logger.Warnf("Error getting ECR credentials: %v", err)
 		return ""
-	} else {
-		imageLogin := fmt.Sprintf("-u %s -p %s %s", ecrCredentials["username"], ecrCredentials["password"], ecrCredentials["registry"])
-		return imageLogin
 	}
+	return fmt.Sprintf("-u %s -p %s %s", creds.Username, creds.Password, creds.Registry)
 }

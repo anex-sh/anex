@@ -110,9 +110,13 @@ func (c *Client) BanMachine(_ string)       {}
 func (c *Client) SelectAndProvisionMachine(ctx context.Context, spec virtualpod.MachineSpecification, pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bool, recorder record.EventRecorder) (string, error) {
 	logger := log.G(ctx)
 
-	query, warnings := BuildProvisionQuery(spec)
+	query, warnings, err := BuildProvisionQuery(spec)
 	for _, w := range warnings {
 		logger.Warnf("RunPod filter: %s", w)
+	}
+	if err != nil {
+		recorder.Eventf(pod, v1.EventTypeWarning, "ProvisioningFailed", "Invalid machine specification: %v", err)
+		return "", fmt.Errorf("invalid machine specification: %w", err)
 	}
 
 	// Pod identity
@@ -136,10 +140,21 @@ func (c *Client) SelectAndProvisionMachine(ctx context.Context, spec virtualpod.
 	provisionEnv := BuildProvisionEnv(pod, proxy, promtail, c.urls)
 	query["env"] = provisionEnv.ToEnvMap()
 
-	// ECR login
+	// ECR login: RunPod references account-stored registry auth objects by ID,
+	// so mint a fresh ECR token and register it as a per-pod auth object.
 	image := pod.Spec.Containers[0].Image
-	if strings.Contains(image, ".dkr.ecr.") && strings.Contains(image, ".amazonaws.com") {
-		query["containerRegistryAuthId"] = utils.GetAWSECRLogin(ctx, image)
+	if utils.IsAWSECRImage(image) {
+		creds, err := utils.GetAWSECRCredentials(ctx, image)
+		if err != nil {
+			recorder.Eventf(pod, v1.EventTypeWarning, "ProvisioningFailed", "Failed to get ECR credentials: %v", err)
+			return "", fmt.Errorf("failed to get ECR credentials: %w", err)
+		}
+		authID, err := c.ensureRegistryAuth(ctx, c.buildRegistryAuthName(pod.UID), creds.Username, creds.Password)
+		if err != nil {
+			recorder.Eventf(pod, v1.EventTypeWarning, "ProvisioningFailed", "Failed to register ECR credentials with RunPod: %v", err)
+			return "", fmt.Errorf("failed to create RunPod registry auth: %w", err)
+		}
+		query["containerRegistryAuthId"] = authID
 	}
 
 	payload, _ := json.MarshalIndent(query, "", "  ")
@@ -313,6 +328,8 @@ func (c *Client) PruneDanglingMachines(ctx context.Context, podUIDs []string) er
 			}
 		}
 	}
+
+	c.pruneRegistryAuths(ctx, uidSet)
 
 	logger.Info("Dangling RunPod pods pruning completed")
 	return nil
