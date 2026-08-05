@@ -46,8 +46,8 @@ Pre-built images are published to ECR and used by the Helm chart by default:
 
 | Image | Registry |
 |---|---|
-| Virtual Kubelet | `public.ecr.aws/m4v1f8q5/gpu-provider/virtual-kubelet` |
-| Gateway | `public.ecr.aws/m4v1f8q5/gpu-provider/gateway` |
+| Virtual Kubelet | `public.ecr.aws/d3n7e4w7/gpu-provider/virtual-kubelet` |
+| Gateway | `public.ecr.aws/d3n7e4w7/gpu-provider/gateway` |
 
 If you need to build and push your own images (e.g. for custom modifications):
 
