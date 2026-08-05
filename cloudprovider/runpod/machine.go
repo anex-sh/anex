@@ -65,10 +65,12 @@ func init() {
 	}
 }
 
-// Known CUDA versions available on RunPod (from their allowedCudaVersions enum).
+// Known CUDA versions available on RunPod (from the allowedCudaVersions enum
+// in https://docs.runpod.io/api-reference/pods/POST/pods, as of 2026-08).
 var knownCUDAVersions = []string{
-	"11.1", "11.2", "11.3", "11.4", "11.5", "11.6", "11.7", "11.8",
-	"12.0", "12.1", "12.2", "12.3", "12.4", "12.5", "12.6", "12.7", "12.8",
+	"11.8",
+	"12.0", "12.1", "12.2", "12.3", "12.4", "12.5", "12.6", "12.7", "12.8", "12.9",
+	"13.0",
 }
 
 // validateGPUNames filters gpu names against the known RunPod set.
@@ -131,8 +133,9 @@ func filterCUDAVersions(cudaMin, cudaMax *float64) []string {
 }
 
 // BuildProvisionQuery translates a MachineSpecification into a RunPod REST API
-// pod creation payload (POST /v1/pods). Returns the payload map and any warnings.
-func BuildProvisionQuery(spec virtualpod.MachineSpecification) (map[string]interface{}, []string) {
+// pod creation payload (POST /v1/pods). Returns the payload map and any
+// warnings, or an error when the specification cannot be satisfied at all.
+func BuildProvisionQuery(spec virtualpod.MachineSpecification) (map[string]interface{}, []string, error) {
 	var warnings []string
 	query := make(map[string]interface{})
 
@@ -182,9 +185,14 @@ func BuildProvisionQuery(spec virtualpod.MachineSpecification) (map[string]inter
 		query["gpuTypePriority"] = "custom"
 	}
 
-	// CUDA filtering
-	cudaVersions := filterCUDAVersions(spec.CUDAMin, spec.CUDAMax)
-	if len(cudaVersions) > 0 {
+	// CUDA filtering. An unsatisfiable range must fail the request: dropping
+	// allowedCudaVersions would tell RunPod that any CUDA version is fine.
+	if spec.CUDAMin != nil || spec.CUDAMax != nil {
+		cudaVersions := filterCUDAVersions(spec.CUDAMin, spec.CUDAMax)
+		if len(cudaVersions) == 0 {
+			return nil, warnings, fmt.Errorf("no RunPod CUDA version satisfies the requested range (RunPod offers %s through %s)",
+				knownCUDAVersions[0], knownCUDAVersions[len(knownCUDAVersions)-1])
+		}
 		query["allowedCudaVersions"] = cudaVersions
 	}
 
@@ -235,5 +243,5 @@ func BuildProvisionQuery(spec virtualpod.MachineSpecification) (map[string]inter
 		warnings = append(warnings, "RunPod API does not support vRAM filtering directly; use gpu-names instead")
 	}
 
-	return query, warnings
+	return query, warnings, nil
 }

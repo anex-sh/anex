@@ -110,9 +110,13 @@ func (c *Client) BanMachine(_ string)       {}
 func (c *Client) SelectAndProvisionMachine(ctx context.Context, spec virtualpod.MachineSpecification, pod *v1.Pod, proxy virtualpod.PodProxyConfig, promtail bool, recorder record.EventRecorder) (string, error) {
 	logger := log.G(ctx)
 
-	query, warnings := BuildProvisionQuery(spec)
+	query, warnings, err := BuildProvisionQuery(spec)
 	for _, w := range warnings {
 		logger.Warnf("RunPod filter: %s", w)
+	}
+	if err != nil {
+		recorder.Eventf(pod, v1.EventTypeWarning, "ProvisioningFailed", "Invalid machine specification: %v", err)
+		return "", fmt.Errorf("invalid machine specification: %w", err)
 	}
 
 	// Pod identity
