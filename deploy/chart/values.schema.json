@@ -1,12 +1,158 @@
 {
-  "$schema": "http://json-schema.org/schema#",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
+  "additionalProperties": false,
+  "required": ["deployment", "appConfig"],
+  "definitions": {
+    "quantity": {
+      "type": "string",
+      "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+      "description": "Kubernetes resource quantity, e.g. \"500m\", \"1000\", \"512Mi\". Must be a YAML string."
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^$|^[0-9]+d$|^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+      "description": "Go duration (\"30s\", \"10m\", \"1h30m\") or whole days (\"1d\")."
+    },
+    "keyValueMap": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "envVarList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "value": { "type": "string" },
+          "valueFrom": { "type": "object" }
+        }
+      }
+    },
+    "resourceQuantityMap": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          { "$ref": "#/definitions/quantity" },
+          { "type": "number" }
+        ]
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limits": { "$ref": "#/definitions/resourceQuantityMap" },
+        "requests": { "$ref": "#/definitions/resourceQuantityMap" },
+        "claims": { "type": "array" }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": {
+          "type": "string",
+          "description": "Image tag. Empty = Chart version."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        }
+      }
+    }
+  },
   "properties": {
+    "global": { "type": "object" },
+    "nameOverride": {
+      "type": "string",
+      "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+      "maxLength": 63
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+      "maxLength": 63
+    },
     "deployment": {
       "type": "object",
+      "additionalProperties": false,
+      "required": ["gateway"],
       "properties": {
+        "affinity": { "type": "object" },
+        "nodeSelector": { "$ref": "#/definitions/keyValueMap" },
+        "tolerations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "key": { "type": "string" },
+              "operator": { "type": "string", "enum": ["Exists", "Equal"] },
+              "value": { "type": "string" },
+              "effect": {
+                "type": "string",
+                "enum": ["NoSchedule", "PreferNoSchedule", "NoExecute"]
+              },
+              "tolerationSeconds": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "serviceAccount": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "annotations": { "$ref": "#/definitions/keyValueMap" }
+          }
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cert": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+              "description": "Base64-encoded TLS certificate (single line)."
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+              "description": "Base64-encoded TLS private key (single line)."
+            },
+            "caCert": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+              "description": "Base64-encoded CA certificate (single line)."
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "anyOf": [
+                  { "required": ["cert"], "properties": { "cert": { "minLength": 1 } } },
+                  { "required": ["key"], "properties": { "key": { "minLength": 1 } } },
+                  { "required": ["caCert"], "properties": { "caCert": { "minLength": 1 } } }
+                ]
+              },
+              "then": {
+                "required": ["cert", "key", "caCert"],
+                "properties": {
+                  "cert": { "minLength": 1 },
+                  "key": { "minLength": 1 },
+                  "caCert": { "minLength": 1 }
+                }
+              }
+            }
+          ]
+        },
         "gateway": {
           "type": "object",
+          "additionalProperties": false,
+          "required": ["class"],
           "properties": {
             "class": {
               "type": "string",
@@ -16,8 +162,21 @@
               "type": "string",
               "description": "Required when gateway.class is node-port"
             },
+            "nodePortUDP": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "description": "Wireguard NodePort (node-port class only). Default k8s NodePort range is 30000-32767."
+            },
+            "nodePortTCP": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "description": "Wstunnel NodePort (node-port class only). Default k8s NodePort range is 30000-32767."
+            },
             "config": {
               "type": "object",
+              "additionalProperties": false,
               "properties": {
                 "secretName": {
                   "type": "string",
@@ -26,7 +185,6 @@
               }
             }
           },
-          "required": ["class"],
           "allOf": [
             {
               "if": {
@@ -35,14 +193,212 @@
                 }
               },
               "then": {
-                "required": ["domain"]
+                "required": ["domain"],
+                "properties": {
+                  "domain": { "minLength": 1 }
+                }
               }
             }
           ]
+        },
+        "containers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "virtualKubelet": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "image": { "$ref": "#/definitions/image" },
+                "env": { "$ref": "#/definitions/envVarList" },
+                "resources": { "$ref": "#/definitions/resources" }
+              }
+            },
+            "gateway": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "image": { "$ref": "#/definitions/image" },
+                "env": { "$ref": "#/definitions/envVarList" },
+                "resources": { "$ref": "#/definitions/resources" }
+              }
+            },
+            "gatewayController": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "resources": { "$ref": "#/definitions/resources" }
+              }
+            }
+          }
         }
-      },
-      "required": ["gateway"]
+      }
+    },
+    "appConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Rendered verbatim into the virtual-kubelet provider config. Unknown keys are rejected by the binary at startup.",
+      "properties": {
+        "logLevel": {
+          "type": "string",
+          "pattern": "(?i)^(panic|fatal|error|warn|warning|info|debug|trace)$"
+        },
+        "cluster": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "clusterUUID": { "type": "string" }
+          }
+        },
+        "cdn": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "agentURL": { "type": "string" },
+            "wireproxyURL": { "type": "string" },
+            "wstunnelURL": { "type": "string" },
+            "promtailURL": { "type": "string" },
+            "initURL": { "type": "string" },
+            "anexAuthToken": { "type": "string" }
+          }
+        },
+        "cloudProvider": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "active": {
+              "type": "string",
+              "pattern": "(?i)^(vastai|runpod|mock)$",
+              "description": "Active cloud provider: vastai, runpod, or mock (case-insensitive). May also be supplied via env var override."
+            },
+            "vastAI": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "apiKey": { "type": "string" }
+              }
+            },
+            "runPod": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "apiKey": { "type": "string" }
+              }
+            }
+          }
+        },
+        "virtualNode": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "nodeName": { "type": "string" },
+            "podLimit": { "$ref": "#/definitions/quantity" },
+            "cpu": { "$ref": "#/definitions/quantity" },
+            "memory": { "$ref": "#/definitions/quantity" },
+            "labels": { "$ref": "#/definitions/keyValueMap" },
+            "taints": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["key", "effect"],
+                "properties": {
+                  "key": { "type": "string", "minLength": 1 },
+                  "operator": { "type": "string", "enum": ["Exists", "Equal"] },
+                  "value": { "type": "string" },
+                  "effect": {
+                    "type": "string",
+                    "enum": ["NoSchedule", "PreferNoSchedule", "NoExecute"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "provisioning": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxRetries": { "type": "integer", "minimum": 0 },
+            "startupTimeout": { "$ref": "#/definitions/duration" },
+            "statusReportTimeout": { "$ref": "#/definitions/duration" },
+            "machineBansStore": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "localFile": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enable": { "type": "boolean" },
+                    "path": { "type": "string" },
+                    "timeout": { "$ref": "#/definitions/duration" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "gateway": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enable": { "type": "boolean" },
+            "configPath": { "type": "string" }
+          }
+        },
+        "promtail": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enable": { "type": "boolean" },
+            "clients": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["url"],
+                "properties": {
+                  "url": { "type": "string", "minLength": 1 },
+                  "basicAuth": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "username": { "type": "string" },
+                      "password": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "required": ["enable"],
+                "properties": { "enable": { "const": true } }
+              },
+              "then": {
+                "required": ["clients"],
+                "properties": {
+                  "clients": { "minItems": 1 }
+                }
+              }
+            }
+          ]
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "certPath": { "type": "string" },
+            "keyPath": { "type": "string" },
+            "caCertPath": { "type": "string" }
+          }
+        },
+        "agentAuthToken": { "type": "string" }
+      }
     }
-  },
-  "required": ["deployment"]
+  }
 }
