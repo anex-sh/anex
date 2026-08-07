@@ -302,6 +302,11 @@ func (p *Provider) initializeVirtualPod(ctx context.Context, vp *virtualpod.Virt
 				return err
 			}
 		} else {
+			// Cleanup possible machine left over from a previous attempt
+			if vp.MachineRentID() != "" {
+				p.machineCleanup(ctx, vp)
+			}
+
 			logger.Info("Selecting and provisioning new machine")
 			// TODO: check err
 			proxyConfig, _ := p.getPodProxyConfigById(vp.ProxySlot())
