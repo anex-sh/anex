@@ -83,6 +83,8 @@ func (c *Client) v1URL(path string) string {
 }
 
 func (c *Client) listMachinesInternal(ctx context.Context) ([]*Machine, error) {
+	logger := log.G(ctx)
+
 	// Instance listing was removed from the v0 API (410 Gone). The v1
 	// endpoint uses keyset pagination capped at 25 instances per page.
 	type MachineList struct {
@@ -100,6 +102,7 @@ func (c *Client) listMachinesInternal(ctx context.Context) ([]*Machine, error) {
 
 		_, machineList, err := utils.MakeRequest[MachineList](ctx, c.retryClient, http.MethodGet, url, nil, c.authHeader)
 		if err != nil {
+			logger.Errorf("Failed to list machines (%s): %v", url, err)
 			return nil, err
 		}
 
@@ -163,9 +166,11 @@ func (c *Client) GetMachine(ctx context.Context, machineID string) (machine *vir
 
 	_, response, err := utils.MakeRequest[MachineResponse](ctx, c.retryClient, http.MethodGet, url, nil, c.authHeader)
 	if err != nil {
+		log.G(ctx).Errorf("Failed to get machine %s: %v", machineID, err)
 		return nil, err
 	}
 	if response.Instance.Machine == nil {
+		log.G(ctx).Warnf("Machine %s not found in VastAI response", machineID)
 		return nil, fmt.Errorf("machine ID=%s not found", machineID)
 	}
 
