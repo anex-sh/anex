@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	neturl "net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -74,21 +75,45 @@ func (c *Client) buildMachineLabel(podUID interface{}) string {
 	return fmt.Sprintf("%s:%s:%s:%s", prefix, c.clusterUID, c.nodeName, podUID)
 }
 
-func (c *Client) listMachinesInternal(ctx context.Context) ([]*Machine, error) {
-	url := c.baseURL + "/instances/"
+// v1URL builds a URL on the v1 API. Vast.ai is migrating endpoints from
+// /api/v0 to /api/v1 one at a time; endpoints stay on baseURL (v0) until
+// their v0 variant is removed.
+func (c *Client) v1URL(path string) string {
+	return strings.TrimSuffix(c.baseURL, "/v0") + "/v1" + path
+}
 
+func (c *Client) listMachinesInternal(ctx context.Context) ([]*Machine, error) {
+	// Instance listing was removed from the v0 API (410 Gone). The v1
+	// endpoint uses keyset pagination capped at 25 instances per page.
 	type MachineList struct {
 		Instances []*Machine `json:"instances"`
+		NextToken string     `json:"next_token"`
 	}
 
-	_, machineList, err := utils.MakeRequest[MachineList](ctx, c.retryClient, http.MethodGet, url, nil, c.authHeader)
-	if err != nil {
-		return nil, err
+	var machines []*Machine
+	afterToken := ""
+	for {
+		url := c.v1URL("/instances/")
+		if afterToken != "" {
+			url += "?after_token=" + neturl.QueryEscape(afterToken)
+		}
+
+		_, machineList, err := utils.MakeRequest[MachineList](ctx, c.retryClient, http.MethodGet, url, nil, c.authHeader)
+		if err != nil {
+			return nil, err
+		}
+
+		machines = append(machines, machineList.Instances...)
+
+		if machineList.NextToken == "" || machineList.NextToken == afterToken {
+			break
+		}
+		afterToken = machineList.NextToken
 	}
 
 	// Filter machines that match clusterUID and node name. Drop the rest.
 	var filteredMachines []*Machine
-	for _, machine := range machineList.Instances {
+	for _, machine := range machines {
 		label := parseMachineLabel(machine.Label)
 		if label == nil {
 			continue

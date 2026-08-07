@@ -1,6 +1,11 @@
 package vastai
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -39,6 +44,71 @@ func TestParseMachineLabel(t *testing.T) {
 	}
 	if parseMachineLabel("xx:a:b:c") != nil {
 		t.Fatal("expected nil for wrong prefix")
+	}
+}
+
+func TestListMachinesInternalPaginatesV1(t *testing.T) {
+	page := func(next string, ids ...int) map[string]interface{} {
+		var instances []map[string]interface{}
+		for _, id := range ids {
+			instances = append(instances, map[string]interface{}{
+				"id":    id,
+				"label": fmt.Sprintf("vk:cluster123:node-a:uid-%d", id),
+			})
+		}
+		// next_token is null on the last page
+		body := map[string]interface{}{"success": true, "instances": instances}
+		if next != "" {
+			body["next_token"] = next
+		} else {
+			body["next_token"] = nil
+		}
+		return body
+	}
+
+	var requests []string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.URL.String())
+		if r.URL.Path != "/api/v1/instances/" {
+			http.Error(w, `{"success":false,"msg":"Not found"}`, http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("after_token") {
+		case "":
+			json.NewEncoder(w).Encode(page("tok1", 1, 2))
+		case "tok1":
+			// foreign machine on the second page must be filtered out
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"instances": []map[string]interface{}{
+					{"id": 3, "label": "vk:cluster123:node-a:uid-3"},
+					{"id": 4, "label": "vk:other-cluster:node-a:uid-4"},
+				},
+				"next_token": nil,
+			})
+		default:
+			t.Errorf("unexpected after_token: %s", r.URL.RawQuery)
+		}
+	}))
+	defer ts.Close()
+
+	c := NewClient(ts.URL+"/api/v0", "apikey", "cluster123", "node-a", URLConfig{}, BansConfig{})
+	machines, err := c.listMachinesInternal(context.Background())
+	if err != nil {
+		t.Fatalf("listMachinesInternal: %v", err)
+	}
+
+	if len(requests) != 2 {
+		t.Fatalf("expected 2 paginated requests, got %d: %v", len(requests), requests)
+	}
+	if len(machines) != 3 {
+		t.Fatalf("expected 3 machines after filtering, got %d", len(machines))
+	}
+	for i, wantID := range []int{1, 2, 3} {
+		if machines[i].ID != wantID {
+			t.Fatalf("machine %d: expected ID %d, got %d", i, wantID, machines[i].ID)
+		}
 	}
 }
 
