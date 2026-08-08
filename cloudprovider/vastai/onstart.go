@@ -37,10 +37,17 @@ sleep 3
 
 touch ~/.no_auto_tmux
 
+# Not every image ships SSH key material. Guard each step: under set -e a
+# chown/chmod on a missing path would abort the bootstrap before the agent,
+# the tunnels or the provider environment ever come up.
 chown root:root /root
-chown -R root:root /root/.ssh
-chmod 700 /root/.ssh
-chmod 600 /root/.ssh/authorized_keys
+if [ -d /root/.ssh ]; then
+    chown -R root:root /root/.ssh
+    chmod 700 /root/.ssh
+    if [ -f /root/.ssh/authorized_keys ]; then
+        chmod 600 /root/.ssh/authorized_keys
+    fi
+fi
 
 ensure_curl() {
     if command -v curl >/dev/null 2>&1; then
