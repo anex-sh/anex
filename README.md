@@ -26,7 +26,7 @@ This creates four binaries in `bin/`:
 
 | Binary | What it does |
 |---|---|
-| `virtual_kubelet` | The main Anex provider — presents remote GPU machines as a virtual Kubernetes node |
+| `virtual_kubelet` | The main Anex provider — implements virtual node where GPU workload can be placed |
 | `gateway_init` | Initializes the WireGuard gateway that connects your cluster to remote machines |
 | `gateway_controller` | Manages HAProxy routing so traffic reaches the right remote pod |
 | `container_agent` | Runs inside the remote machine to manage the container lifecycle |
